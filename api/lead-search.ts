@@ -56,16 +56,17 @@ function scoreResult(result: SearchResult): number {
   return score;
 }
 
-// Wichtig: CORS Headers vor allem anderen setzen
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers ZUERST setzen
+  // CORS Headers für alle Requests setzen
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
   res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Content-Type', 'application/json');
 
-  // Handle OPTIONS request for CORS preflight
+  // Handle OPTIONS request für CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log('CORS preflight request received');
     return res.status(200).end();
   }
 
@@ -78,9 +79,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Debug: Log den Request
+    console.log('Request method:', req.method);
+    console.log('Request body:', req.body);
+    console.log('Request headers:', req.headers);
+
     const config: LeadSearchConfig = req.body;
 
-    if (!config.query?.trim()) {
+    if (!config || !config.query?.trim()) {
+      console.error('Invalid request body:', config);
       return res.status(400).json({
         success: false, 
         message: 'Suchanfrage ist erforderlich.'
@@ -170,9 +177,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('Lead search error:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({
       success: false, 
-      message: 'Ein unerwarteter Fehler ist aufgetreten.'
+      message: 'Ein unerwarteter Fehler ist aufgetreten.',
+      error: error.message // Immer Error-Message zeigen für besseres Debugging
     });
   }
 }
