@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/lead-search.ts": {
+      "runtime": "@vercel/node@3.0.21",
+      "maxDuration": 300
+    }
+  }
+}
