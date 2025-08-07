@@ -57,20 +57,55 @@ export async function search11880(query: string): Promise<SourceResult> {
     } else {
       // Vercel Production - verwende chrome-aws-lambda
       console.log('🔧 Using chrome-aws-lambda');
-      const executablePath = await chromium.executablePath;
-      console.log('🔧 Chrome executable path:', executablePath);
+      console.log('🔧 chromium.args:', chromium.args);
+      console.log('🔧 chromium.headless:', chromium.headless);
+      console.log('🔧 chromium.defaultViewport:', chromium.defaultViewport);
       
-      if (!executablePath) {
-        throw new Error('Chrome executable not found for Vercel environment');
+      try {
+        const executablePath = await chromium.executablePath;
+        console.log('🔧 Chrome executable path:', executablePath);
+        
+        if (!executablePath) {
+          console.error('❌ Chrome executable path is null/undefined');
+          throw new Error('Chrome executable not found for Vercel environment');
+        }
+        
+        browser = await puppeteer.launch({
+          args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+          defaultViewport: chromium.defaultViewport,
+          executablePath: executablePath,
+          headless: chromium.headless,
+          ignoreHTTPSErrors: true,
+        });
+        console.log('✅ Browser launched successfully');
+      } catch (chromiumError) {
+        console.error('❌ Chrome-aws-lambda failed:', chromiumError);
+        console.log('🔄 Fallback: Trying puppeteer without executablePath...');
+        
+        // Fallback: Versuche ohne executablePath (für neuere Vercel-Versionen)
+        try {
+          browser = await puppeteer.launch({
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-accelerated-2d-canvas',
+              '--no-first-run',
+              '--no-zygote',
+              '--single-process',
+              '--disable-gpu',
+              '--hide-scrollbars',
+              '--disable-web-security'
+            ],
+            headless: true,
+            ignoreHTTPSErrors: true,
+          });
+          console.log('✅ Fallback browser launched successfully');
+        } catch (fallbackError) {
+          console.error('❌ Fallback also failed:', fallbackError);
+          throw new Error(`Browser launch failed: ${chromiumError.message} | Fallback: ${fallbackError.message}`);
+        }
       }
-      
-      browser = await puppeteer.launch({
-        args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-        defaultViewport: chromium.defaultViewport,
-        executablePath: executablePath,
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
-      });
     }
     const page = await browser.newPage();
     
@@ -279,11 +314,19 @@ export async function search11880(query: string): Promise<SourceResult> {
   } catch (error: any) {
     if (browser) await browser.close().catch(() => {});
     
-    console.error('❌ 11880 search error:', error.message || error);
+    console.error('❌ 11880 search error:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      signal: error.signal
+    });
+    
     return {
       source: '11880',
       results: [],
-      error: '11880 Scraping-Fehler: ' + (error.message || 'Unbekannter Fehler')
+      error: '11880 Scraping-Fehler: ' + (error.message || 'Unbekannter Fehler') + ' (Details in logs)'
     };
   }
 }
