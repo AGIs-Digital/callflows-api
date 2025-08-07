@@ -57,7 +57,7 @@ function scoreResult(result: SearchResult): number {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers SOFORT setzen (vor allem anderen!)
+  // CORS Headers SOFORT setzen
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin');
