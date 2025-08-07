@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test für Lead-Search API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 CORS Test für Lead-Search API</h1>
+        <p>Teste deine Lead-Search API direkt aus dem Browser heraus.</p>
+        
+        <form id="testForm">
+            <div class="form-group">
+                <label for="apiUrl">API URL:</label>
+                <input type="text" id="apiUrl" value="https://deine-vercel-app.vercel.app/api/lead-search" placeholder="https://your-app.vercel.app/api/lead-search">
+                <small>Ersetze mit deiner echten Vercel-URL</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="searchQuery">Suchanfrage:</label>
+                <input type="text" id="searchQuery" value="Zahnarzt München" placeholder="z.B. Zahnarzt München">
+            </div>
+            
+            <button type="submit" id="testButton">🚀 API Test starten</button>
+        </form>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const apiUrl = document.getElementById('apiUrl').value;
+            const searchQuery = document.getElementById('searchQuery').value;
+            const resultDiv = document.getElementById('result');
+            const testButton = document.getElementById('testButton');
+            
+            if (!apiUrl || !searchQuery) {
+                showResult('Bitte API URL und Suchanfrage eingeben.', 'error');
+                return;
+            }
+            
+            // UI für Loading State
+            testButton.disabled = true;
+            testButton.textContent = '⏳ Teste...';
+            showResult('🔄 Teste CORS und API-Verbindung...\n\nRequest Details:\n- URL: ' + apiUrl + '\n- Query: "' + searchQuery + '"\n- Method: POST\n- Content-Type: application/json', 'loading');
+            
+            try {
+                console.log('Sende Request an:', apiUrl);
+                console.log('Mit Query:', searchQuery);
+                
+                const startTime = Date.now();
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: searchQuery
+                    })
+                });
+                
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+                
+                console.log('Response Status:', response.status);
+                console.log('Response Headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response Data:', data);
+                
+                let resultText = `✅ CORS TEST ERFOLGREICH!\n\n`;
+                resultText += `⏱️ Antwortzeit: ${duration}ms\n`;
+                resultText += `📊 Status: ${response.status} ${response.statusText}\n\n`;
+                
+                if (data.success) {
+                    resultText += `🎯 Suchergebnisse: ${data.results ? data.results.length : 0} Leads gefunden\n\n`;
+                    
+                    if (data.results && data.results.length > 0) {
+                        resultText += `📋 Erste 3 Ergebnisse:\n`;
+                        data.results.slice(0, 3).forEach((result, index) => {
+                            resultText += `\n${index + 1}. ${result.companyName}\n`;
+                            if (result.phone) resultText += `   📞 ${result.phone}\n`;
+                            if (result.url) resultText += `   🌐 ${result.url}\n`;
+                            if (result.description) resultText += `   💬 ${result.description.substring(0, 100)}...\n`;
+                        });
+                    }
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        resultText += `\n⚠️ Warnungen:\n${data.errors.join('\n')}`;
+                    }
+                } else {
+                    resultText += `❌ API-Fehler: ${data.message || 'Unbekannter Fehler'}`;
+                }
+                
+                showResult(resultText, 'success');
+                
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                
+                let errorText = `❌ CORS/API FEHLER:\n\n`;
+                
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    errorText += `🚫 CORS-Fehler erkannt!\n\n`;
+                    errorText += `Mögliche Ursachen:\n`;
+                    errorText += `• CORS-Header nicht korrekt gesetzt\n`;
+                    errorText += `• API-URL falsch oder nicht erreichbar\n`;
+                    errorText += `• Netzwerkproblem\n\n`;
+                    errorText += `Lösungsschritte:\n`;
+                    errorText += `1. Überprüfe die API-URL\n`;
+                    errorText += `2. Stelle sicher, dass die API deployed ist\n`;
+                    errorText += `3. Prüfe die CORS-Konfiguration in der API\n`;
+                } else {
+                    errorText += `Fehlerdetails:\n${error.message}\n\n`;
+                    errorText += `Fehlertyp: ${error.name}`;
+                }
+                
+                showResult(errorText, 'error');
+            } finally {
+                testButton.disabled = false;
+                testButton.textContent = '🚀 API Test starten';
+            }
+        });
+        
+        function showResult(text, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = text;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+        
+        // Lade gespeicherte URL falls vorhanden
+        const savedUrl = localStorage.getItem('apiUrl');
+        if (savedUrl) {
+            document.getElementById('apiUrl').value = savedUrl;
+        }
+        
+        // Speichere URL bei Änderung
+        document.getElementById('apiUrl').addEventListener('change', function() {
+            localStorage.setItem('apiUrl', this.value);
+        });
+    </script>
+</body>
+</html>

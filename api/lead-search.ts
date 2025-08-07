@@ -57,14 +57,13 @@ function scoreResult(result: SearchResult): number {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers für alle Requests setzen
+  // CORS Headers SOFORT setzen (vor allem anderen!)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin');
   res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Content-Type', 'application/json');
 
-  // Handle OPTIONS request für CORS preflight
+  // Preflight Request (OPTIONS) behandeln
   if (req.method === 'OPTIONS') {
     console.log('CORS preflight request received');
     return res.status(200).end();
