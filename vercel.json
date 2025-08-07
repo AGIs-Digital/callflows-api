@@ -16,19 +16,23 @@
         },
         {
           "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, OPTIONS, PUT, DELETE"
+          "value": "GET, POST, OPTIONS, PUT, DELETE, HEAD"
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRF-Token"
+          "value": "Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRF-Token, Cache-Control, User-Agent"
         },
         {
           "key": "Access-Control-Allow-Credentials",
-          "value": "true"
+          "value": "false"
         },
         {
           "key": "Access-Control-Max-Age",
           "value": "86400"
+        },
+        {
+          "key": "Vary",
+          "value": "Origin"
         }
       ]
     }

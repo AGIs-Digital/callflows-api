@@ -57,11 +57,13 @@ function scoreResult(result: SearchResult): number {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers SOFORT setzen
+  // CORS Headers SOFORT setzen - ERWEITERT für Cross-Domain
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With, X-CSRF-Token, Cache-Control');
+  res.setHeader('Access-Control-Allow-Credentials', 'false'); // Explizit false bei * Origin
   res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Vary', 'Origin'); // Wichtig für Caching
 
   // Preflight Request (OPTIONS) behandeln
   if (req.method === 'OPTIONS') {
