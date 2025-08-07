@@ -2,8 +2,12 @@
   "functions": {
     "api/lead-search.ts": {
       "runtime": "@vercel/node@3.0.21",
-      "maxDuration": 300
+      "maxDuration": 300,
+      "memory": 1024
     }
+  },
+  "env": {
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
   },
   "headers": [
     {
