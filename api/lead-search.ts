@@ -65,9 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Max-Age', '86400');
   res.setHeader('Vary', 'Origin'); // Wichtig für Caching
 
-  // Preflight Request (OPTIONS) behandeln
+  // OPTIONS Request MUSS 200 zurückgeben
   if (req.method === 'OPTIONS') {
-    console.log('CORS preflight request received');
+    console.log('CORS request received');
     return res.status(200).end();
   }
 
@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ 
       success: false, 
-      message: 'Method not allowed. Use POST.' 
+      message: 'Method not allowed.' 
     });
   }
 

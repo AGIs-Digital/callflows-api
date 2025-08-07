@@ -1,17 +1,24 @@
 import axios from 'axios';
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer-core';
+import chromium from 'chrome-aws-lambda';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Funktion zum Scrapen von Telefonnummern von der echten Website
 async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath,
+    headless: chromium.headless,
+    ignoreHTTPSErrors: true,
+  });
   const page = await browser.newPage();
   
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
     
     // Hole den gesamten Text der Seite
-    const pageText = await page.textContent('body') || '';
+    const pageText = await page.evaluate(() => document.body.textContent) || '';
     
     // Erweiterte Telefonnummer-Pattern
     const phonePatterns = [
