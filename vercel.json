@@ -6,9 +6,6 @@
       "memory": 1024
     }
   },
-  "env": {
-    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
-  },
   "headers": [
     {
       "source": "/api/(.*)",

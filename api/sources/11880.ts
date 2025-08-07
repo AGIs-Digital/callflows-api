@@ -1,4 +1,5 @@
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer-core';
+import chromium from 'chrome-aws-lambda';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Hilfsfunktion um Suchbegriff in "Was" und "Wo" aufzuteilen
@@ -42,28 +43,17 @@ export async function search11880(query: string): Promise<SourceResult> {
   try {
     console.log('🔍 11880: Starting NEW search for:', query);
     
-    browser = await chromium.launch({ 
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
+    // Puppeteer mit chrome-aws-lambda für Vercel
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
     const page = await browser.newPage();
     
-    await page.setExtraHTTPHeaders({
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     const { what, where } = parseSearchQuery(query);
     console.log(`🎯 11880: Searching "${what}" in "${where}"`);
@@ -81,13 +71,13 @@ export async function search11880(query: string): Promise<SourceResult> {
     // Cookie-Banner akzeptieren falls vorhanden
     try {
       await page.click('button[data-testid="uc-accept-all-button"], .cookie-accept', { timeout: 3000 });
-      await page.waitForTimeout(1000);
+      await page.waitFor(1000);
     } catch (e) {
       console.log('🍪 11880: No cookie banner found');
     }
     
     // Warte auf Suchergebnisse
-    await page.waitForTimeout(3000);
+    await page.waitFor(3000);
     
     const results: SearchResult[] = [];
     let currentPage = 1;
@@ -242,7 +232,7 @@ export async function search11880(query: string): Promise<SourceResult> {
       try {
         console.log(`🔄 11880: Going to page ${currentPage}: ${nextPageUrl}`);
         await page.goto(nextPageUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        await page.waitForTimeout(2000);
+        await page.waitFor(2000);
         
         // Prüfe ob es noch Ergebnisse gibt
         const hasResults = await page.$('h2.result-list-entry-title__headline');
