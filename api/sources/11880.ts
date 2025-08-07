@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer-core';
+import puppeteerCore from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import chromium from 'chrome-aws-lambda';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
@@ -70,7 +71,7 @@ export async function search11880(query: string): Promise<SourceResult> {
           throw new Error('Chrome executable not found for Vercel environment');
         }
         
-        browser = await puppeteer.launch({
+        browser = await puppeteerCore.launch({
           args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
           defaultViewport: chromium.defaultViewport,
           executablePath: executablePath,
@@ -82,8 +83,9 @@ export async function search11880(query: string): Promise<SourceResult> {
         console.error('❌ Chrome-aws-lambda failed:', chromiumError);
         console.log('🔄 Fallback: Trying puppeteer without executablePath...');
         
-        // Fallback: Versuche ohne executablePath (für neuere Vercel-Versionen)
+        // Fallback: Versuche normales puppeteer mit eingebautem Chrome
         try {
+          console.log('🔄 Fallback: Using regular puppeteer with built-in Chrome...');
           browser = await puppeteer.launch({
             args: [
               '--no-sandbox',
@@ -100,10 +102,13 @@ export async function search11880(query: string): Promise<SourceResult> {
             headless: true,
             ignoreHTTPSErrors: true,
           });
-          console.log('✅ Fallback browser launched successfully');
+          console.log('✅ Fallback browser launched successfully with puppeteer');
         } catch (fallbackError) {
           console.error('❌ Fallback also failed:', fallbackError);
-          throw new Error(`Browser launch failed: ${chromiumError.message} | Fallback: ${fallbackError.message}`);
+          
+          // Letzter Fallback: Komplett ohne Browser-Scraping (nur Google)
+          console.log('🔄 Final fallback: Disabling 11880 scraping for this request');
+          throw new Error(`All browser launch methods failed. Chrome-aws-lambda: ${chromiumError.message} | Puppeteer: ${fallbackError.message}`);
         }
       }
     }
