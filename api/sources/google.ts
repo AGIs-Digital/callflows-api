@@ -1,6 +1,6 @@
 import axios from 'axios';
 import puppeteer from 'puppeteer-core';
-import chromium from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Funktion zum Scrapen von Telefonnummern von der echten Website
@@ -15,11 +15,11 @@ async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> 
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
   } else {
-    // Vercel Production - verwende chrome-aws-lambda
+    // Vercel Production - verwende @sparticuz/chromium
     browser = await puppeteer.launch({
       args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
+      executablePath: await chromium.executablePath(),
       headless: chromium.headless,
       ignoreHTTPSErrors: true,
     });

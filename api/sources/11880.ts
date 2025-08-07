@@ -1,6 +1,6 @@
 import puppeteerCore from 'puppeteer-core';
 import puppeteer from 'puppeteer';
-import chromium from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Hilfsfunktion um Suchbegriff in "Was" und "Wo" aufzuteilen
@@ -56,36 +56,37 @@ export async function search11880(query: string): Promise<SourceResult> {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
     } else {
-      // Vercel Production - verwende chrome-aws-lambda
-      console.log('🔧 Using chrome-aws-lambda');
-      console.log('🔧 chromium.args:', chromium.args);
-      console.log('🔧 chromium.headless:', chromium.headless);
-      console.log('🔧 chromium.defaultViewport:', chromium.defaultViewport);
+      // Vercel Production - verwende @sparticuz/chromium (modernste Vercel-kompatible Library)
+      console.log('🔧 Using @sparticuz/chromium for Vercel');
+      console.log('🔧 Platform:', process.platform);
+      console.log('🔧 Architecture:', process.arch);
+      console.log('🔧 Node version:', process.version);
       
       try {
-        const executablePath = await chromium.executablePath;
-        console.log('🔧 Chrome executable path:', executablePath);
-        
-        if (!executablePath) {
-          console.error('❌ Chrome executable path is null/undefined');
-          throw new Error('Chrome executable not found for Vercel environment');
-        }
+        // Erste Methode: @sparticuz/chromium mit puppeteer-core
+        const executablePath = await chromium.executablePath();
+        console.log('🔧 Sparticuz Chrome executable path:', executablePath);
         
         browser = await puppeteerCore.launch({
-          args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+          args: [
+            ...chromium.args,
+            '--hide-scrollbars',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor'
+          ],
           defaultViewport: chromium.defaultViewport,
           executablePath: executablePath,
           headless: chromium.headless,
           ignoreHTTPSErrors: true,
         });
-        console.log('✅ Browser launched successfully');
-      } catch (chromiumError) {
-        console.error('❌ Chrome-aws-lambda failed:', chromiumError);
-        console.log('🔄 Fallback: Trying puppeteer without executablePath...');
+        console.log('✅ Browser launched successfully with @sparticuz/chromium');
         
-        // Fallback: Versuche normales puppeteer mit eingebautem Chrome
+      } catch (sparticuzError) {
+        console.error('❌ @sparticuz/chromium failed:', sparticuzError);
+        console.log('🔄 Fallback 1: Trying puppeteer with system Chrome...');
+        
+        // Fallback 1: Versuche normales puppeteer 
         try {
-          console.log('🔄 Fallback: Using regular puppeteer with built-in Chrome...');
           browser = await puppeteer.launch({
             args: [
               '--no-sandbox',
@@ -97,18 +98,35 @@ export async function search11880(query: string): Promise<SourceResult> {
               '--single-process',
               '--disable-gpu',
               '--hide-scrollbars',
-              '--disable-web-security'
+              '--disable-web-security',
+              '--disable-features=VizDisplayCompositor'
             ],
             headless: true,
             ignoreHTTPSErrors: true,
           });
-          console.log('✅ Fallback browser launched successfully with puppeteer');
-        } catch (fallbackError) {
-          console.error('❌ Fallback also failed:', fallbackError);
+          console.log('✅ Fallback 1: Browser launched with regular puppeteer');
           
-          // Letzter Fallback: Komplett ohne Browser-Scraping (nur Google)
-          console.log('🔄 Final fallback: Disabling 11880 scraping for this request');
-          throw new Error(`All browser launch methods failed. Chrome-aws-lambda: ${chromiumError.message} | Puppeteer: ${fallbackError.message}`);
+        } catch (puppeteerError) {
+          console.error('❌ Regular puppeteer also failed:', puppeteerError);
+          console.log('🔄 Fallback 2: Trying minimal puppeteer-core config...');
+          
+          // Fallback 2: Minimale puppeteer-core Konfiguration
+          try {
+            browser = await puppeteerCore.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox'],
+              headless: true,
+              ignoreHTTPSErrors: true,
+            });
+            console.log('✅ Fallback 2: Browser launched with minimal config');
+            
+          } catch (minimalError) {
+            console.error('❌ All browser launch methods failed!');
+            console.error('❌ Sparticuz:', sparticuzError.message);
+            console.error('❌ Puppeteer:', puppeteerError.message);
+            console.error('❌ Minimal:', minimalError.message);
+            
+            throw new Error(`CRITICAL: 11880 scraping unavailable. All browser methods failed. Latest: ${minimalError.message}`);
+          }
         }
       }
     }
