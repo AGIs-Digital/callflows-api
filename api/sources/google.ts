@@ -5,13 +5,26 @@ import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Funktion zum Scrapen von Telefonnummern von der echten Website
 async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> {
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath,
-    headless: chromium.headless,
-    ignoreHTTPSErrors: true,
-  });
+  const isLocal = process.env.NODE_ENV !== 'production';
+  
+  let browser;
+  if (isLocal) {
+    // Lokale Entwicklung - verwende System Chrome
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+  } else {
+    // Vercel Production - verwende chrome-aws-lambda
+    browser = await puppeteer.launch({
+      args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
+    });
+  }
+  
   const page = await browser.newPage();
   
   try {

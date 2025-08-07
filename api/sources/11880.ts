@@ -44,13 +44,34 @@ export async function search11880(query: string): Promise<SourceResult> {
     console.log('🔍 11880: Starting NEW search for:', query);
     
     // Puppeteer mit chrome-aws-lambda für Vercel
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
+    const isLocal = process.env.NODE_ENV !== 'production';
+    console.log(`🔧 Environment: ${isLocal ? 'LOCAL' : 'PRODUCTION'}`);
+    
+    if (isLocal) {
+      // Lokale Entwicklung - verwende System Chrome
+      console.log('🔧 Using local Chrome browser');
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    } else {
+      // Vercel Production - verwende chrome-aws-lambda
+      console.log('🔧 Using chrome-aws-lambda');
+      const executablePath = await chromium.executablePath;
+      console.log('🔧 Chrome executable path:', executablePath);
+      
+      if (!executablePath) {
+        throw new Error('Chrome executable not found for Vercel environment');
+      }
+      
+      browser = await puppeteer.launch({
+        args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+        defaultViewport: chromium.defaultViewport,
+        executablePath: executablePath,
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true,
+      });
+    }
     const page = await browser.newPage();
     
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
