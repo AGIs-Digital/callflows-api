@@ -50,10 +50,11 @@ export async function search11880(query: string): Promise<SourceResult> {
     
     const results: SearchResult[] = [];
     let currentPage = 1;
-    const maxPages = 3; // Limit für Performance
+    let totalProcessed = 0;
+    const maxPages = 100; // UNLIMITIERT - stoppt bei "keine Ergebnisse"
     
     while (currentPage <= maxPages) {
-      console.log(`📄 11880: Scraping page ${currentPage}...`);
+      console.log(`📄 11880: Scraping page ${currentPage}/${maxPages}... (${totalProcessed} results so far)`);
       
       const pageUrl = currentPage === 1 ? searchUrl : `${searchUrl}?page=${currentPage}`;
       
@@ -88,13 +89,14 @@ export async function search11880(query: string): Promise<SourceResult> {
         }
         
         titleElements.each((index, titleEl) => {
+          totalProcessed++;
           
           const $titleEl = $(titleEl);
           const companyName = $titleEl.text().trim();
           
           if (!companyName || companyName.length < 2) return; // Continue to next
           
-          console.log(`🔍 Processing "${companyName}"`);
+          console.log(`🔍 [${totalProcessed}] Processing "${companyName}"`);
           
           let phone: string | undefined;
           let website: string | undefined;
@@ -252,7 +254,7 @@ export async function search11880(query: string): Promise<SourceResult> {
             _detailUrl: detailUrl // Temporär für Detail-Scraping
           });
           
-          console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'} - ${detailUrl ? 'Detail: ✓' : 'Detail: ✗'}`);
+          console.log(`✅ [${totalProcessed}] "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'} - ${detailUrl ? 'Detail: ✓' : 'Detail: ✗'}`);
         });
         
         // STUFE 2: Detail-Scraping deaktiviert für Production (verschlüsselte URLs)
@@ -261,9 +263,15 @@ export async function search11880(query: string): Promise<SourceResult> {
           delete (result as any)._detailUrl;
         }
         
-        if (results.length >= 50) break; // Production limit: 50 pro Seite
+        // UNLIMITIERT: Alle Seiten durchsuchen bis keine Ergebnisse mehr
         
         currentPage++;
+        
+        // Verzögerung zwischen Seiten (nur wenn nicht letzte Seite)
+        if (currentPage <= maxPages) {
+          console.log(`⏱️  Waiting 1s before next page...`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1s zwischen Seiten
+        }
         
       } catch (pageError) {
         console.error(`❌ 11880: Failed to load page ${currentPage}:`, pageError);
@@ -271,7 +279,7 @@ export async function search11880(query: string): Promise<SourceResult> {
       }
     }
     
-    console.log(`🎉 11880 HTTP search completed: ${results.length} total results found across ${currentPage - 1} pages`);
+    console.log(`🎉 11880 HTTP search completed: ${results.length} total results found (processed ${totalProcessed} entries across ${currentPage - 1} pages)`);
     return {
       source: '11880',
       results

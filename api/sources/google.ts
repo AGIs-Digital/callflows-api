@@ -126,12 +126,13 @@ async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> 
 
 export async function searchGoogle(query: string, apiKey: string, cseId: string): Promise<SourceResult> {
   try {
-    console.log('Searching Google Custom Search for:', query);
+    console.log('🔍 Searching Google Custom Search for:', query);
 
     const results: SearchResult[] = [];
+    let totalProcessed = 0;
     
-    // Production: Mehr Seiten für bessere Ergebnisse
-    const maxPages = 3; // Bis zu 30 Ergebnisse (3 Seiten × 10)
+    // UNLIMITIERT: Alle verfügbaren Seiten durchsuchen
+    const maxPages = 10; // Google API max: 100 Ergebnisse (10 Seiten × 10)
     
     for (let page = 0; page < maxPages; page++) {
       const startIndex = page * 10 + 1;
@@ -158,12 +159,18 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
         // Verarbeite alle 10 Ergebnisse pro Seite
         const itemsToProcess = response.data.items; // Alle Ergebnisse
         
-        console.log(`Processing ${itemsToProcess.length} Google results...`);
+        console.log(`📋 Processing ${itemsToProcess.length} Google results on page ${page + 1}/${maxPages}...`);
 
         for (const [index, item] of itemsToProcess.entries()) {
+          totalProcessed++;
+          
+          // Verzögerung zwischen Requests
+          if (index > 0) {
+            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms Pause
+          }
           
           try {
-            console.log(`[${index + 1}/${itemsToProcess.length}] Processing: ${item.title}`);
+            console.log(`🔄 [${totalProcessed}] Processing: ${item.title}`);
             
             // Filter: Keine Foren, Marktplätze oder Social Media
             const unwantedDomains = [
@@ -199,26 +206,26 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
             );
             
             if (isUnwanted) {
-              console.log(`[${index + 1}] ❌ SKIPPED (Forum/Social): ${domain}`);
+              console.log(`[${totalProcessed}] ❌ SKIPPED (Forum/Social): ${domain}`);
               continue;
             }
             
-            console.log(`[${index + 1}] ✅ BUSINESS WEBSITE: ${domain}`);
+            console.log(`[${totalProcessed}] ✅ BUSINESS WEBSITE: ${domain}`);
             
             // Versuche Telefonnummer von der Website zu scrapen
             let phone: string | undefined;
             
             if (item.link) {
-              console.log(`[${index + 1}] Scraping phone from: ${item.link}`);
+              console.log(`[${totalProcessed}] 📞 Scraping phone from: ${item.link}`);
               phone = await scrapePhoneFromWebsite(item.link);
               
               if (phone) {
-                console.log(`[${index + 1}] ✅ Phone found: ${phone}`);
+                console.log(`[${totalProcessed}] ✅ Phone found: ${phone}`);
               } else {
-                console.log(`[${index + 1}] ❌ No phone found`);
+                console.log(`[${totalProcessed}] ❌ No phone found`);
               }
             } else {
-              console.log(`[${index + 1}] ⏭️  Skipped (social media or invalid URL)`);
+              console.log(`[${totalProcessed}] ⏭️  Skipped (social media or invalid URL)`);
             }
 
             const result: SearchResult = {
@@ -230,10 +237,10 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
             };
 
             results.push(result);
-            console.log(`[${index + 1}] Added: "${result.companyName}" ${phone ? '(with phone)' : '(no phone)'}`);
+            console.log(`[${totalProcessed}] ✅ Added: "${result.companyName}" ${phone ? '(with phone)' : '(no phone)'}`);
 
           } catch (itemError) {
-            console.error(`[${index + 1}] Error processing item:`, itemError);
+            console.error(`[${totalProcessed}] ❌ Error processing item:`, itemError);
             // Füge Ergebnis trotzdem hinzu, aber ohne Telefonnummer
             results.push({
               source: 'google',
@@ -250,6 +257,12 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
           throw pageError; // Fehler bei erster Seite werfen
         }
         break; // Bei späteren Seiten einfach abbrechen
+      }
+      
+      // Verzögerung zwischen Seiten
+      if (page < maxPages - 1) {
+        console.log(`⏱️  Waiting 1s before next page...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1s zwischen Seiten
       }
     }
 
