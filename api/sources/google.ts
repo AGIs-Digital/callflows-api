@@ -3,6 +3,31 @@ import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
+// Funktion zur Normalisierung und Validierung von Telefonnummern
+function normalizePhoneNumber(phone: string): string | undefined {
+  // Entferne alle nicht-numerischen Zeichen außer + am Anfang
+  let cleaned = phone.replace(/[^\d+]/g, '');
+  
+  // Entferne führende Nullen, aber behalte internationale Vorwahl
+  if (cleaned.startsWith('0049')) {
+    cleaned = '+49' + cleaned.substring(4);
+  } else if (cleaned.startsWith('0') && !cleaned.startsWith('+')) {
+    cleaned = '+49' + cleaned.substring(1);
+  } else if (!cleaned.startsWith('+') && cleaned.length >= 10) {
+    cleaned = '+49' + cleaned;
+  }
+  
+  // Validiere deutsche Telefonnummer
+  const germanPhoneRegex = /^\+49\d{10,11}$/;
+  if (germanPhoneRegex.test(cleaned)) {
+    // Formatiere schön: +49 XXX XXXXXXX
+    const formatted = cleaned.replace(/^(\+49)(\d{2,4})(\d+)$/, '$1 $2 $3');
+    return formatted;
+  }
+  
+  return undefined;
+}
+
 // Funktion zum Scrapen von Telefonnummern von der echten Website
 async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> {
   const isLocal = process.env.NODE_ENV !== 'production';
@@ -28,36 +53,99 @@ async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> 
   const page = await browser.newPage();
   
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 12000 });
     
-    // Hole den gesamten Text der Seite
+    // Warte kurz um sicherzustellen, dass dynamischer Content geladen wird
+    await page.waitForTimeout(1000);
+    
+    // 1. Versuche spezifische DOM-Selektoren für Telefonnummern
+    const phoneFromSelectors = await page.evaluate(() => {
+      const selectors = [
+        '[href^="tel:"]',
+        '[data-phone]',
+        '.phone',
+        '.telefon',
+        '.contact-phone',
+        '.tel',
+        '#phone',
+        '#telefon',
+        '.contact-info [href^="tel:"]',
+        'a[href*="tel"]',
+        '.footer [href^="tel:"]',
+        '.header [href^="tel:"]'
+      ];
+      
+      for (const selector of selectors) {
+        const elements = document.querySelectorAll(selector);
+        for (const element of elements) {
+          const href = element.getAttribute('href');
+          if (href && href.startsWith('tel:')) {
+            return href.replace('tel:', '').trim();
+          }
+          const text = element.textContent?.trim();
+          if (text && /[\d\+\-\s\(\)]{8,}/.test(text)) {
+            return text;
+          }
+        }
+      }
+      return null;
+    });
+    
+    if (phoneFromSelectors) {
+      const normalized = normalizePhoneNumber(phoneFromSelectors);
+      if (normalized) {
+        await browser.close();
+        return normalized;
+      }
+    }
+    
+    // 2. Hole den gesamten Text und suche mit verbesser Regex
     const pageText = await page.evaluate(() => document.body.textContent) || '';
     
-    // Erweiterte Telefonnummer-Pattern
+    // Verbesserte deutsche Telefonnummer-Pattern
     const phonePatterns = [
-      /(\+49[\s\-]?\d{2,5}[\s\-\/]?\d{3,8}[\s\-\/]?\d{0,8})/g,
-      /(0\d{2,5}[\s\-\/]?\d{3,8}[\s\-\/]?\d{0,8})/g,
-      /(\(\d{2,5}\)[\s\-]?\d{3,8}[\s\-]?\d{0,8})/g,
-      /(Tel\.?:?\s*[\+\d\s\-\/\(\)]{8,20})/gi,
-      /(Telefon:?\s*[\+\d\s\-\/\(\)]{8,20})/gi,
-      /(Phone:?\s*[\+\d\s\-\/\(\)]{8,20})/gi,
-      /(Fon:?\s*[\+\d\s\-\/\(\)]{8,20})/gi
+      // Internationale Formate
+      /(\+49[\s\-]?(?:\(0\))?[\s\-]?\d{2,5}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
+      // Deutsche Vorwahl mit 0
+      /(0\d{2,5}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
+      // Mit Klammern um Vorwahl
+      /(\(0\d{2,5}\)[\s\-]?\d{3,4}[\s\-]?\d{3,4})/g,
+      // Mit Labels
+      /(Tel\.?:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
+      /(Telefon:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
+      /(Phone:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
+      /(Fon:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
+      /(Mobil:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
+      // Ohne Label aber mit charakteristischen Formaten
+      /(\+49[\s\(]?[1-9]\d{1,4}[\s\)\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
+      /(0[1-9]\d{1,4}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g
     ];
+    
+    const foundPhones: string[] = [];
     
     for (const pattern of phonePatterns) {
       const matches = pageText.match(pattern);
-      if (matches && matches.length > 0) {
-        let phone = matches[0].replace(/^(Tel\.?:?\s*|Telefon:?\s*|Phone:?\s*|Fon:?\s*)/i, '').trim();
-        // Bereinige die Telefonnummer
-        phone = phone.replace(/[^\d\+\(\)\-\s\/]/g, '').trim();
-        if (phone.length >= 8) {
-          await browser.close();
-          return phone;
+      if (matches) {
+        for (const match of matches) {
+          let phone = match.replace(/^(Tel\.?:?\s*|Telefon:?\s*|Phone:?\s*|Fon:?\s*|Mobil:?\s*)/i, '').trim();
+          
+          // Normalisiere und validiere
+          const normalized = normalizePhoneNumber(phone);
+          if (normalized && !foundPhones.includes(normalized)) {
+            foundPhones.push(normalized);
+          }
         }
       }
     }
+    
+    // Nimm die erste gültige Telefonnummer
+    if (foundPhones.length > 0) {
+      await browser.close();
+      return foundPhones[0];
+    }
+    
   } catch (error) {
-    console.error('Phone scraping error:', error);
+    console.error('Phone scraping error for', url, ':', error);
   } finally {
     await browser.close();
   }
