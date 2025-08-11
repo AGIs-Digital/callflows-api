@@ -267,10 +267,68 @@ export async function search11880(query: string, useCache: boolean = true): Prom
           console.log(`✅ [${totalProcessed}] "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'} - ${detailUrl ? 'Detail: ✓' : 'Detail: ✗'}`);
         });
         
-        // STUFE 2: Detail-Scraping deaktiviert für Production (verschlüsselte URLs)
-        // Bereinige temporäre Felder
-        for (const result of results) {
-          delete (result as any)._detailUrl;
+        // STUFE 2: Detail-Scraping für Website-URLs (AKTIVIERT!)
+        console.log(`🔄 Starting detail scraping for ${results.length} entries...`);
+        
+        for (let i = 0; i < results.length && i < 10; i++) { // Limit auf erste 10 für Performance
+          const result = results[i] as any;
+          
+          if (result._detailUrl && !result.url) {
+            try {
+              console.log(`📄 [${i+1}] Fetching detail page: ${result._detailUrl}`);
+              
+              const detailResponse = await axios.get(result._detailUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                  'Accept-Language': 'de-DE,de;q=0.9',
+                  'Referer': searchUrl
+                },
+                timeout: 8000
+              });
+              
+              console.log(`✅ [${i+1}] Detail page loaded: ${detailResponse.status}`);
+              
+              // Parse Detail-Seite
+              const $detail = cheerio.load(detailResponse.data);
+              
+              // Suche nach entry-detail-list__label mit Website URL
+              console.log(`🔍 [${i+1}] Looking for website URL in detail page...`);
+              
+              const $labels = $detail('.entry-detail-list__label');
+              console.log(`📋 [${i+1}] Found ${$labels.length} detail labels`);
+              
+              $labels.each((labelIndex, labelEl) => {
+                const $label = $detail(labelEl);
+                const labelText = $label.text().trim();
+                
+                console.log(`🏷️ [${i+1}] Label ${labelIndex + 1}: "${labelText}"`);
+                
+                // Prüfe ob Label eine URL enthält (startet mit http)
+                if (labelText.startsWith('http')) {
+                  result.url = labelText;
+                  console.log(`✅ [${i+1}] Found website URL: "${labelText}"`);
+                  return false; // Break out of each loop
+                }
+              });
+              
+              // Pause zwischen Detail-Requests
+              if (i < 9) {
+                await new Promise(resolve => setTimeout(resolve, 800)); // 800ms zwischen Detail-Seiten
+              }
+              
+            } catch (detailError: any) {
+              console.error(`❌ [${i+1}] Failed to fetch detail page for ${result.companyName}:`, detailError.message);
+            }
+          }
+          
+          // Bereinige temporäre Felder
+          delete result._detailUrl;
+        }
+        
+        // Bereinige auch die restlichen Einträge ohne Detail-Scraping
+        for (let i = 10; i < results.length; i++) {
+          delete (results[i] as any)._detailUrl;
         }
         
         // UNLIMITIERT: Alle Seiten durchsuchen bis keine Ergebnisse mehr
