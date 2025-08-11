@@ -1,6 +1,4 @@
 import axios from 'axios';
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
 
 // Funktion zur Normalisierung und Validierung von Telefonnummern
@@ -28,135 +26,102 @@ function normalizePhoneNumber(phone: string): string | undefined {
   return undefined;
 }
 
-// Funktion zum Scrapen von Telefonnummern von der echten Website
+// HTTP-basierte Telefonnummer-Extraktion (KEINE Browser mehr!)
 async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> {
-  const isLocal = process.env.NODE_ENV !== 'production';
-  
-  // DEAKTIVIERT in Production um Browser-Konflikte zu vermeiden
-  if (!isLocal) {
-    console.log('Google phone scraping disabled in production to prevent browser conflicts');
-    return undefined;
-  }
-  
-  let browser;
-  if (isLocal) {
-    // Lokale Entwicklung - verwende System Chrome
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-  } else {
-    // Vercel Production - verwende @sparticuz/chromium
-    browser = await puppeteer.launch({
-      args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
-  }
-  
-  const page = await browser.newPage();
-  
   try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 12000 });
+    console.log(`📞 HTTP phone scraping from: ${url}`);
     
-    // Warte kurz um sicherzustellen, dass dynamischer Content geladen wird
-    await page.waitForTimeout(1000);
-    
-    // 1. Versuche spezifische DOM-Selektoren für Telefonnummern
-    const phoneFromSelectors = await page.evaluate(() => {
-      const selectors = [
-        '[href^="tel:"]',
-        '[data-phone]',
-        '.phone',
-        '.telefon',
-        '.contact-phone',
-        '.tel',
-        '#phone',
-        '#telefon',
-        '.contact-info [href^="tel:"]',
-        'a[href*="tel"]',
-        '.footer [href^="tel:"]',
-        '.header [href^="tel:"]'
-      ];
-      
-      for (const selector of selectors) {
-        const elements = document.querySelectorAll(selector);
-        for (const element of Array.from(elements)) {
-          const href = element.getAttribute('href');
-          if (href && href.startsWith('tel:')) {
-            return href.replace('tel:', '').trim();
-          }
-          const text = element.textContent?.trim();
-          if (text && /[\d\+\-\s\(\)]{8,}/.test(text)) {
-            return text;
-          }
-        }
-      }
-      return null;
+    // HTTP Request mit User-Agent (wie bei 11880)
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'de-DE,de;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+      },
+      timeout: 8000, // Kürzer als 11880 für schnellere Google-Suche
+      maxRedirects: 3,
     });
     
-    if (phoneFromSelectors) {
-      const normalized = normalizePhoneNumber(phoneFromSelectors);
-      if (normalized) {
-        await browser.close();
-        return normalized;
+    console.log(`✅ Page loaded: ${response.status} - ${url}`);
+    
+    // 1. Suche nach tel:-Links im HTML
+    const telLinkRegex = /href=['"]tel:([^'"]+)['"]/gi;
+    let match;
+    const telLinks: string[] = [];
+    
+    while ((match = telLinkRegex.exec(response.data)) !== null) {
+      const phone = match[1].replace(/[^\d\+\-\s\(\)]/g, '').trim();
+      if (phone) {
+        const normalized = normalizePhoneNumber(phone);
+        if (normalized && !telLinks.includes(normalized)) {
+          telLinks.push(normalized);
+        }
       }
     }
     
-    // 2. Hole den gesamten Text und suche mit verbesser Regex
-    const pageText = await page.evaluate(() => document.body.textContent) || '';
+    if (telLinks.length > 0) {
+      console.log(`📞 Found tel: link: ${telLinks[0]}`);
+      return telLinks[0];
+    }
     
-    // Verbesserte deutsche Telefonnummer-Pattern
+    // 2. Text-basierte Regex-Suche (wie Browser-Version aber auf HTML)
+    const textContent = response.data
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')   // Remove styles
+      .replace(/<[^>]+>/g, ' ')                          // Remove HTML tags
+      .replace(/&[^;]+;/g, ' ');                         // Remove HTML entities
+    
+    // Deutsche Telefonnummer-Pattern (optimiert für HTTP)
     const phonePatterns = [
+      // tel: Links (zusätzliche Sicherheit)
+      /tel:[\+\d\s\-\(\)]{8,}/gi,
+      // Kontakt-Bereiche
+      /(Kontakt|Contact|Telefon|Phone|Fon|Tel\.?)[\s:]*[\+\d\s\-\/\(\)]{10,}/gi,
       // Internationale Formate
       /(\+49[\s\-]?(?:\(0\))?[\s\-]?\d{2,5}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
       // Deutsche Vorwahl mit 0
-      /(0\d{2,5}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
+      /(^|[^\d])0\d{2,5}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4}(?=[^\d]|$)/g,
       // Mit Klammern um Vorwahl
       /(\(0\d{2,5}\)[\s\-]?\d{3,4}[\s\-]?\d{3,4})/g,
-      // Mit Labels
-      /(Tel\.?:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
-      /(Telefon:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
-      /(Phone:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
-      /(Fon:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
-      /(Mobil:?\s*[\+\d\s\-\/\(\)]{10,})/gi,
-      // Ohne Label aber mit charakteristischen Formaten
-      /(\+49[\s\(]?[1-9]\d{1,4}[\s\)\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g,
-      /(0[1-9]\d{1,4}[\s\-\/]?\d{3,4}[\s\-\/]?\d{3,4})/g
     ];
     
     const foundPhones: string[] = [];
     
     for (const pattern of phonePatterns) {
-      const matches = pageText.match(pattern);
+      const matches = textContent.match(pattern);
       if (matches) {
         for (const match of matches) {
-          let phone = match.replace(/^(Tel\.?:?\s*|Telefon:?\s*|Phone:?\s*|Fon:?\s*|Mobil:?\s*)/i, '').trim();
+          // Bereinige Match
+          let phone = match
+            .replace(/^(Kontakt|Contact|Telefon|Phone|Fon|Tel\.?)[\s:]*/i, '')
+            .replace(/^tel:/i, '')
+            .trim();
           
-          // Normalisiere und validiere
+          // Entferne führende/nachfolgende Nicht-Telefon-Zeichen
+          phone = phone.replace(/^[^\d\+\(]+/, '').replace(/[^\d]+$/, '');
+          
           const normalized = normalizePhoneNumber(phone);
           if (normalized && !foundPhones.includes(normalized)) {
             foundPhones.push(normalized);
+            console.log(`📞 Found phone via pattern: ${normalized}`);
           }
         }
       }
     }
     
-    // Nimm die erste gültige Telefonnummer
     if (foundPhones.length > 0) {
-      await browser.close();
-      return foundPhones[0];
+      return foundPhones[0]; // Erste gefundene Nummer
     }
     
-  } catch (error) {
-    console.error('Phone scraping error for', url, ':', error);
-  } finally {
-    await browser.close();
+    console.log(`📞 No phone found on: ${url}`);
+    return undefined;
+    
+  } catch (error: any) {
+    console.error(`📞 Phone scraping failed for ${url}:`, error.message);
+    return undefined;
   }
-  
-  return undefined;
 }
 
 export async function searchGoogle(query: string, apiKey: string, cseId: string): Promise<SourceResult> {
