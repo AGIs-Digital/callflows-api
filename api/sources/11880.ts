@@ -61,32 +61,38 @@ export async function search11880(query: string): Promise<SourceResult> {
       console.log('🔧 Platform:', process.platform);
       console.log('🔧 Architecture:', process.arch);
       console.log('🔧 Node version:', process.version);
-      
+
+      // Stabilisierung: Headless/Graphics setzen und eindeutiges Profil pro Invocation
+      chromium.setHeadlessMode = true;
+      chromium.setGraphicsMode = false;
+      const userDataDir = `/tmp/chromium-profile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
       try {
-        // Erste Methode: @sparticuz/chromium mit puppeteer-core
+        // Hauptweg: @sparticuz/chromium mit puppeteer-core
         const executablePath = await chromium.executablePath();
         console.log('🔧 Sparticuz Chrome executable path:', executablePath);
-        
+
         browser = await puppeteerCore.launch({
           args: [
             ...chromium.args,
             '--hide-scrollbars',
             '--disable-web-security',
-            '--disable-features=VizDisplayCompositor'
+            '--disable-features=VizDisplayCompositor',
           ],
           defaultViewport: chromium.defaultViewport,
-          executablePath: executablePath,
+          executablePath,
           headless: chromium.headless,
           ignoreHTTPSErrors: true,
+          userDataDir,
         });
         console.log('✅ Browser launched successfully with @sparticuz/chromium');
-        
+
       } catch (sparticuzError) {
         console.error('❌ @sparticuz/chromium failed:', sparticuzError);
-        console.log('🔄 Fallback 1: Trying puppeteer with system Chrome...');
-        
-        // Fallback 1: Versuche normales puppeteer 
+        console.log('🔄 Fallback: Trying regular puppeteer with built-in Chrome...');
+
         try {
+          // Einziger Fallback: reguläres puppeteer (integrierter Chrome)
           browser = await puppeteer.launch({
             args: [
               '--no-sandbox',
@@ -99,34 +105,16 @@ export async function search11880(query: string): Promise<SourceResult> {
               '--disable-gpu',
               '--hide-scrollbars',
               '--disable-web-security',
-              '--disable-features=VizDisplayCompositor'
+              '--disable-features=VizDisplayCompositor',
             ],
             headless: true,
             ignoreHTTPSErrors: true,
+            userDataDir,
           });
-          console.log('✅ Fallback 1: Browser launched with regular puppeteer');
-          
+          console.log('✅ Fallback: Browser launched with regular puppeteer');
         } catch (puppeteerError) {
           console.error('❌ Regular puppeteer also failed:', puppeteerError);
-          console.log('🔄 Fallback 2: Trying minimal puppeteer-core config...');
-          
-          // Fallback 2: Minimale puppeteer-core Konfiguration
-          try {
-            browser = await puppeteerCore.launch({
-              args: ['--no-sandbox', '--disable-setuid-sandbox'],
-              headless: true,
-              ignoreHTTPSErrors: true,
-            });
-            console.log('✅ Fallback 2: Browser launched with minimal config');
-            
-          } catch (minimalError) {
-            console.error('❌ All browser launch methods failed!');
-            console.error('❌ Sparticuz:', sparticuzError.message);
-            console.error('❌ Puppeteer:', puppeteerError.message);
-            console.error('❌ Minimal:', minimalError.message);
-            
-            throw new Error(`CRITICAL: 11880 scraping unavailable. All browser methods failed. Latest: ${minimalError.message}`);
-          }
+          throw new Error(`CRITICAL: 11880 scraping unavailable. Sparticuz failed: ${String(sparticuzError?.message || sparticuzError)} | Puppeteer failed: ${String(puppeteerError?.message || puppeteerError)}`);
         }
       }
     }
