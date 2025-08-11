@@ -147,41 +147,119 @@ export async function search11880(query: string): Promise<SourceResult> {
             }
           }
           
-          // Website-URL suchen (mehrere Strategien)
+          // Website-URL suchen (verbesserte Strategien für 11880)
           console.log(`🌐 Searching for website URL for "${companyName}"`);
           
-          // Strategie 1: Direkte Website-Links in der Entry
           const $container = $listItem.length > 0 ? $listItem : $titleEl.closest('.result-list-entry');
           if ($container.length > 0) {
-            // Suche nach Website-Button oder Link
-            const $websiteLink = $container.find('a[href*="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"])').first();
-            if ($websiteLink.length > 0) {
-              website = $websiteLink.attr('href');
-              console.log(`✅ Found website link: "${website}"`);
+            
+            // Strategie 1: 11880-spezifische Website-Selektoren
+            const websiteSelectors = [
+              // Direkte Website-Links
+              'a[href*="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"])',
+              // 11880-spezifische Klassen
+              '.result-list-entry-website a',
+              '.company-website a',
+              '.website-url a',
+              '.homepage-url a',
+              'a[class*="website"]',
+              'a[class*="homepage"]',
+              'a[class*="web"]',
+              'a[data-testid*="website"]',
+              'a[data-qa*="website"]',
+              // Button/Link mit Website-Inhalten
+              'a[title*="Website"]',
+              'a[title*="Homepage"]',
+              'a[aria-label*="Website"]',
+              'a[aria-label*="Homepage"]',
+              // Nach Text suchen
+              'a:contains("www.")',
+              'a:contains(".de")',
+              'a:contains(".com")',
+              // Allgemeine HTTP-Links (gefiltert)
+              'a[href^="http"]:not([href*="11880"]):not([href*="tel"]):not([href*="mail"]):not([href*="maps"]):not([href*="facebook"]):not([href*="instagram"])'
+            ];
+            
+            for (const selector of websiteSelectors) {
+              const $webLinks = $container.find(selector);
+              
+              $webLinks.each((i, linkEl) => {
+                if (website) return false; // Break if found
+                
+                const $link = $(linkEl);
+                const href = $link.attr('href');
+                const text = $link.text().trim();
+                
+                if (href) {
+                  // Validiere und bereinige URL
+                  let cleanUrl = href;
+                  
+                  // 11880-Redirect-URLs umleiten
+                  if (href.includes('11880.com/redirect/') || href.includes('11880.com/link/')) {
+                    // Versuche Ziel-URL aus Redirect zu extrahieren
+                    const urlMatch = href.match(/[?&]url=([^&]+)/);
+                    if (urlMatch) {
+                      try {
+                        cleanUrl = decodeURIComponent(urlMatch[1]);
+                      } catch (e) {
+                        console.log(`⚠️ Failed to decode redirect URL: ${href}`);
+                        return;
+                      }
+                    } else {
+                      console.log(`⚠️ Skipping 11880 redirect without target: ${href}`);
+                      return;
+                    }
+                  }
+                  
+                  // Validiere finale URL
+                  if (cleanUrl.startsWith('http') && 
+                      !cleanUrl.includes('11880.com') && 
+                      !cleanUrl.includes('facebook.com') &&
+                      !cleanUrl.includes('instagram.com') &&
+                      !cleanUrl.includes('maps.google')) {
+                    
+                    website = cleanUrl;
+                    console.log(`✅ Found website via "${selector}": "${website}"`);
+                    return false; // Break
+                  }
+                }
+                
+                // Fallback: Suche nach Domain-Pattern im Link-Text
+                if (!website && text) {
+                  const domainMatch = text.match(/(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/);
+                  if (domainMatch) {
+                    const domain = domainMatch[0];
+                    website = domain.startsWith('www.') ? `https://${domain}` : `https://www.${domain}`;
+                    console.log(`✅ Found website via text pattern: "${website}"`);
+                    return false; // Break
+                  }
+                }
+              });
+              
+              if (website) break; // Break outer loop if found
             }
             
-            // Fallback: Suche nach spezifischen Klassen für Website-Links
+            // Strategie 2: Suche im HTML-Text nach Domain-Pattern
             if (!website) {
-              const websiteSelectors = [
-                'a.result-list-entry-website-link',
-                'a[class*="website"]',
-                'a[class*="homepage"]',
-                'a[class*="web"]',
-                '.website-link a',
-                '.homepage-link a',
-                'a[title*="Website"]',
-                'a[title*="Homepage"]'
+              const containerText = $container.text();
+              const domainPatterns = [
+                /(?:www\.)?[a-zA-Z0-9-]+\.de\b/g,
+                /(?:www\.)?[a-zA-Z0-9-]+\.com\b/g,
+                /(?:www\.)?[a-zA-Z0-9-]+\.net\b/g,
+                /(?:www\.)?[a-zA-Z0-9-]+\.org\b/g
               ];
               
-              for (const selector of websiteSelectors) {
-                const $webLink = $container.find(selector).first();
-                if ($webLink.length > 0) {
-                  const href = $webLink.attr('href');
-                  if (href && href.startsWith('http') && !href.includes('11880.com')) {
-                    website = href;
-                    console.log(`✅ Found website via selector "${selector}": "${website}"`);
-                    break;
+              for (const pattern of domainPatterns) {
+                const matches = containerText.match(pattern);
+                if (matches) {
+                  for (const match of matches) {
+                    if (!match.includes('11880') && !match.includes('google')) {
+                      website = match.startsWith('www.') ? `https://${match}` : `https://www.${match}`;
+                      console.log(`✅ Found website via text pattern: "${website}"`);
+                      break;
+                    }
                   }
+                  if (website) break;
                 }
               }
             }

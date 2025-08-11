@@ -166,10 +166,50 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
           try {
             console.log(`[${index + 1}/${itemsToProcess.length}] Processing: ${item.title}`);
             
+            // Filter: Keine Foren, Marktplätze oder Social Media
+            const unwantedDomains = [
+              'reddit.com',
+              'facebook.com',
+              'twitter.com',
+              'tiktok.com',
+              'youtube.com',
+              'ebay.de',
+              'ebay-kleinanzeigen.de',
+              'kleinanzeigen.de',
+              'markt.de',
+              'quoka.de',
+              'kalaydo.de',
+              'gutefrage.net',
+              'wer-weiss-was.de'
+            ];
+            
+            if (!item.link) {
+              console.log(`[${index + 1}] ❌ SKIPPED (No link)`);
+              return;
+            }
+            
+            const url = new URL(item.link);
+            const domain = url.hostname.toLowerCase();
+            
+            const isUnwanted = unwantedDomains.some(unwanted => 
+              domain.includes(unwanted) || 
+              item.link.toLowerCase().includes(unwanted) ||
+              item.title.toLowerCase().includes('forum') ||
+              item.title.toLowerCase().includes('reddit') ||
+              item.title.toLowerCase().includes('wiki')
+            );
+            
+            if (isUnwanted) {
+              console.log(`[${index + 1}] ❌ SKIPPED (Forum/Social): ${domain}`);
+              return;
+            }
+            
+            console.log(`[${index + 1}] ✅ BUSINESS WEBSITE: ${domain}`);
+            
             // Versuche Telefonnummer von der Website zu scrapen
             let phone: string | undefined;
             
-            if (item.link && !item.link.includes('facebook.com') && !item.link.includes('xing.com')) {
+            if (item.link) {
               console.log(`[${index + 1}] Scraping phone from: ${item.link}`);
               phone = await scrapePhoneFromWebsite(item.link);
               
