@@ -147,120 +147,113 @@ export async function search11880(query: string): Promise<SourceResult> {
             }
           }
           
-          // Website-URL suchen (verbesserte Strategien für 11880)
+          // Website-URL suchen (Zwei-Stufen-Scraping für 11880)
           console.log(`🌐 Searching for website URL for "${companyName}"`);
           
           const $container = $listItem.length > 0 ? $listItem : $titleEl.closest('.result-list-entry');
           if ($container.length > 0) {
             
-            // Strategie 1: 11880-spezifische Website-Selektoren
-            const websiteSelectors = [
-              // Direkte Website-Links
-              'a[href*="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"])',
-              // 11880-spezifische Klassen
-              '.result-list-entry-website a',
-              '.company-website a',
-              '.website-url a',
-              '.homepage-url a',
-              'a[class*="website"]',
-              'a[class*="homepage"]',
-              'a[class*="web"]',
-              'a[data-testid*="website"]',
-              'a[data-qa*="website"]',
-              // Button/Link mit Website-Inhalten
-              'a[title*="Website"]',
-              'a[title*="Homepage"]',
-              'a[aria-label*="Website"]',
-              'a[aria-label*="Homepage"]',
-              // Nach Text suchen
-              'a:contains("www.")',
-              'a:contains(".de")',
-              'a:contains(".com")',
-              // Allgemeine HTTP-Links (gefiltert)
-              'a[href^="http"]:not([href*="11880"]):not([href*="tel"]):not([href*="mail"]):not([href*="maps"]):not([href*="facebook"]):not([href*="instagram"])'
+            // STUFE 1: Finde Detail-URL für diesen Eintrag
+            let detailUrl: string | undefined;
+            
+            // Suche nach "Mehr Details" Link oder Title-Link
+            const detailLinkSelectors = [
+              'a[href*="/branchenbuch/"]',
+              'a[href*="11880.com"][href*="html"]',
+              '.result-list-entry-title a',
+              'h2 a',
+              'a:contains("Mehr Details")',
+              'a:contains("Details")'
             ];
             
-            for (const selector of websiteSelectors) {
-              const $webLinks = $container.find(selector);
-              
-              $webLinks.each((i, linkEl) => {
-                if (website) return false; // Break if found
-                
-                const $link = $(linkEl);
-                const href = $link.attr('href');
-                const text = $link.text().trim();
-                
-                if (href) {
-                  // Validiere und bereinige URL
-                  let cleanUrl = href;
-                  
-                  // 11880-Redirect-URLs umleiten
-                  if (href.includes('11880.com/redirect/') || href.includes('11880.com/link/')) {
-                    // Versuche Ziel-URL aus Redirect zu extrahieren
-                    const urlMatch = href.match(/[?&]url=([^&]+)/);
-                    if (urlMatch) {
-                      try {
-                        cleanUrl = decodeURIComponent(urlMatch[1]);
-                      } catch (e) {
-                        console.log(`⚠️ Failed to decode redirect URL: ${href}`);
-                        return;
-                      }
-                    } else {
-                      console.log(`⚠️ Skipping 11880 redirect without target: ${href}`);
-                      return;
-                    }
-                  }
-                  
-                  // Validiere finale URL
-                  if (cleanUrl.startsWith('http') && 
-                      !cleanUrl.includes('11880.com') && 
-                      !cleanUrl.includes('facebook.com') &&
-                      !cleanUrl.includes('instagram.com') &&
-                      !cleanUrl.includes('maps.google')) {
-                    
-                    website = cleanUrl;
-                    console.log(`✅ Found website via "${selector}": "${website}"`);
-                    return false; // Break
-                  }
+            for (const selector of detailLinkSelectors) {
+              const $detailLink = $container.find(selector).first();
+              if ($detailLink.length > 0) {
+                const href = $detailLink.attr('href');
+                if (href && href.includes('11880.com')) {
+                  detailUrl = href.startsWith('http') ? href : `https://www.11880.com${href}`;
+                  console.log(`🔗 Found detail URL: ${detailUrl}`);
+                  break;
                 }
-                
-                // Fallback: Suche nach Domain-Pattern im Link-Text
-                if (!website && text) {
-                  const domainMatch = text.match(/(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/);
-                  if (domainMatch) {
-                    const domain = domainMatch[0];
-                    website = domain.startsWith('www.') ? `https://${domain}` : `https://www.${domain}`;
-                    console.log(`✅ Found website via text pattern: "${website}"`);
-                    return false; // Break
-                  }
-                }
-              });
-              
-              if (website) break; // Break outer loop if found
+              }
             }
             
-            // Strategie 2: Suche im HTML-Text nach Domain-Pattern
-            if (!website) {
-              const containerText = $container.text();
-              const domainPatterns = [
-                /(?:www\.)?[a-zA-Z0-9-]+\.de\b/g,
-                /(?:www\.)?[a-zA-Z0-9-]+\.com\b/g,
-                /(?:www\.)?[a-zA-Z0-9-]+\.net\b/g,
-                /(?:www\.)?[a-zA-Z0-9-]+\.org\b/g
-              ];
-              
-              for (const pattern of domainPatterns) {
-                const matches = containerText.match(pattern);
-                if (matches) {
-                  for (const match of matches) {
-                    if (!match.includes('11880') && !match.includes('google')) {
-                      website = match.startsWith('www.') ? `https://${match}` : `https://www.${match}`;
-                      console.log(`✅ Found website via text pattern: "${website}"`);
+            // Fallback: Konstruiere Detail-URL aus Firmenname (wenn verfügbar)
+            if (!detailUrl && $titleEl.closest('a').length > 0) {
+              const titleLink = $titleEl.closest('a').attr('href');
+              if (titleLink && titleLink.includes('11880.com')) {
+                detailUrl = titleLink.startsWith('http') ? titleLink : `https://www.11880.com${titleLink}`;
+                console.log(`🔗 Found detail URL via title: ${detailUrl}`);
+              }
+            }
+            
+            // STUFE 2: Wenn Detail-URL gefunden, hole Website von Detail-Seite
+            if (detailUrl) {
+              try {
+                console.log(`📄 Fetching detail page for website: ${detailUrl}`);
+                
+                const detailResponse = await axios.get(detailUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'de-DE,de;q=0.9',
+                    'Referer': 'https://www.11880.com/suche/friseur/hannover'
+                  },
+                  timeout: 6000
+                });
+                
+                console.log(`✅ Detail page loaded: ${detailResponse.status}`);
+                
+                // Parse Detail-Seite
+                const $detail = cheerio.load(detailResponse.data);
+                
+                // Suche Website-Button oder Link auf Detail-Seite
+                const websiteSelectors = [
+                  // Website-Button (wie im Screenshot)
+                  'a[href*="http"]:contains("Website")',
+                  'button:contains("Website") + a',
+                  '.entry-detail-list a[href*="http"]:not([href*="11880.com"])',
+                  // Allgemeine externe Links
+                  'a[href^="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"]):not([href*="facebook"]):not([href*="instagram"])',
+                  // Nach Icon-Klassen
+                  'a[class*="website"]',
+                  'a[class*="web"]',
+                  'a[class*="homepage"]',
+                  // Spezifische 11880-Klassen
+                  '.website-link',
+                  '.homepage-link',
+                  '[data-testid*="website"] a',
+                  // Nach Text-Pattern
+                  'a:contains("www.")',
+                  'a:contains(".de")',
+                  'a:contains(".com")'
+                ];
+                
+                for (const selector of websiteSelectors) {
+                  const $webLink = $detail(selector).first();
+                  if ($webLink.length > 0) {
+                    const href = $webLink.attr('href');
+                    if (href && href.startsWith('http') && !href.includes('11880.com')) {
+                      website = href;
+                      console.log(`✅ Found website from detail page via "${selector}": "${website}"`);
                       break;
                     }
                   }
-                  if (website) break;
                 }
+                
+                // Fallback: Suche nach Domain-Pattern im Detail-Text
+                if (!website) {
+                  const detailText = $detail('body').text();
+                  const domainMatch = detailText.match(/(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/);
+                  if (domainMatch && !domainMatch[0].includes('11880')) {
+                    const domain = domainMatch[0];
+                    website = domain.startsWith('www.') ? `https://${domain}` : `https://www.${domain}`;
+                    console.log(`✅ Found website from detail text: "${website}"`);
+                  }
+                }
+                
+              } catch (detailError: any) {
+                console.error(`❌ Failed to fetch detail page for ${companyName}:`, detailError.message);
               }
             }
           }
