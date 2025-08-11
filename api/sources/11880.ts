@@ -250,35 +250,52 @@ export async function search11880(query: string): Promise<SourceResult> {
               // Parse Detail-Seite
               const $detail = cheerio.load(detailResponse.data);
               
-              // Suche Website-Button oder Link auf Detail-Seite
-              const websiteSelectors = [
-                // Website-Button (wie im Screenshot)
-                'a[href*="http"]:contains("Website")',
-                'button:contains("Website") + a',
-                '.entry-detail-list a[href*="http"]:not([href*="11880.com"])',
-                // Allgemeine externe Links
-                'a[href^="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"]):not([href*="facebook"]):not([href*="instagram"])',
-                // Nach Icon-Klassen
-                'a[class*="website"]',
-                'a[class*="web"]',
-                'a[class*="homepage"]',
-                // Spezifische 11880-Klassen
-                '.website-link',
-                '.homepage-link',
-                '[data-testid*="website"] a'
-              ];
+              // Nutze die strukturierte Detail-Seite mit entry-detail-list__label
+              console.log(`🔍 [${i+1}] Parsing structured detail page...`);
               
-              for (const selector of websiteSelectors) {
-                const $webLink = $detail(selector).first();
-                if ($webLink.length > 0) {
-                  const href = $webLink.attr('href');
-                  if (href && href.startsWith('http') && !href.includes('11880.com')) {
-                    result.url = href;
-                    console.log(`✅ [${i+1}] Found website from detail page: "${href}"`);
-                    break;
+              // Finde alle entry-detail-list__label Elemente (4 Stück: Telefon, Adresse, E-Mail, Homepage)
+              const $labels = $detail('.entry-detail-list__label');
+              console.log(`📋 [${i+1}] Found ${$labels.length} detail labels`);
+              
+              $labels.each((labelIndex, labelEl) => {
+                const $label = $detail(labelEl);
+                const labelText = $label.text().trim().toLowerCase();
+                
+                console.log(`🏷️ [${i+1}] Label ${labelIndex + 1}: "${labelText}"`);
+                
+                // Suche nach Website/Homepage Label
+                if (labelText.includes('website') || labelText.includes('homepage') || labelText.includes('web')) {
+                  // Finde den Link im gleichen Container
+                  const $container = $label.parent();
+                  const $websiteLink = $container.find('a[href^="http"]:not([href*="11880.com"])').first();
+                  
+                  if ($websiteLink.length > 0) {
+                    const href = $websiteLink.attr('href');
+                    if (href) {
+                      result.url = href;
+                      console.log(`✅ [${i+1}] Found website via structured label: "${href}"`);
+                      return false; // Break out of each loop
+                    }
                   }
                 }
-              }
+                
+                // Fallback: Suche nach E-Mail Label und extrahiere Website aus E-Mail-Domain
+                if (!result.url && (labelText.includes('e-mail') || labelText.includes('email'))) {
+                  const $container = $label.parent();
+                  const emailText = $container.text();
+                  const emailMatch = emailText.match(/([a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))/);
+                  
+                  if (emailMatch) {
+                    const domain = emailMatch[2];
+                    if (!domain.includes('gmail') && !domain.includes('outlook') && !domain.includes('web.de')) {
+                      const websiteUrl = `https://www.${domain}`;
+                      result.url = websiteUrl;
+                      console.log(`✅ [${i+1}] Found website via email domain: "${websiteUrl}"`);
+                      return false; // Break out of each loop
+                    }
+                  }
+                }
+              });
               
             } catch (detailError: any) {
               console.error(`❌ [${i+1}] Failed to fetch detail page for ${result.companyName}:`, detailError.message);
