@@ -141,12 +141,11 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string,
     const results: SearchResult[] = [];
     let totalProcessed = 0;
     
-    // OPTIMIERT für Google Custom Search API Limits:
-    // - 100 Requests pro Tag (kostenlos) 
-    // - 10.000 Requests pro Tag (bezahlt)
-    // - 100 Ergebnisse max (10 Seiten × 10)
+    // PRODUCTION OPTIMIERT für Google Custom Search API:
+    // - 100 Ergebnisse max (10 Seiten × 10) - Google API Limit
+    // - Schnelleres Rate Limiting für Production
     const maxPages = 10; // Google Custom Search API max: 100 Ergebnisse
-    const requestDelay = 1000; // 1s zwischen Requests (60 Requests/Minute max)
+    const requestDelay = 200; // 200ms zwischen Requests (etwas schneller)
     
     for (let page = 0; page < maxPages; page++) {
       const startIndex = page * 10 + 1;
@@ -178,9 +177,9 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string,
         for (const [index, item] of itemsToProcess.entries()) {
           totalProcessed++;
           
-          // Rate Limiting für Phone Scraping (weniger aggressiv)
+          // Rate Limiting für Phone Scraping (optimiert für Production)
           if (index > 0) {
-            await new Promise(resolve => setTimeout(resolve, 300)); // 300ms zwischen Phone Requests
+            await new Promise(resolve => setTimeout(resolve, 200)); // 200ms zwischen Phone Requests (schneller)
           }
           
           try {

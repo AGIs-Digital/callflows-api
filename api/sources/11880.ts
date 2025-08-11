@@ -270,14 +270,12 @@ export async function search11880(query: string, useCache: boolean = true): Prom
         // STUFE 2: Detail-Scraping für Website-URLs (AKTIVIERT!)
         console.log(`🔄 Starting detail scraping for ${results.length} entries...`);
         
-        // Debug: Prüfe welche Einträge Detail-URLs haben
+        // Zähle Einträge mit Detail-URLs
         const entriesWithDetailUrls = results.filter((r: any) => r._detailUrl);
-        console.log(`🔍 DEBUG: ${entriesWithDetailUrls.length} entries have detail URLs`);
+        console.log(`🌐 Starting detail scraping for ${entriesWithDetailUrls.length} entries with detail URLs...`);
         
-        for (let i = 0; i < results.length && i < 10; i++) { // Limit auf erste 10 für Performance
+        for (let i = 0; i < results.length; i++) { // UNLIMITIERT: Alle Detail-Seiten scrapen!
           const result = results[i] as any;
-          
-          console.log(`🔍 DEBUG [${i+1}]: Checking entry "${result.companyName}" - detailUrl: ${result._detailUrl ? 'YES' : 'NO'} - url: ${result.url ? 'ALREADY HAS' : 'MISSING'}`);
           
           if (result._detailUrl && !result.url) {
             try {
@@ -302,13 +300,10 @@ export async function search11880(query: string, useCache: boolean = true): Prom
               console.log(`🔍 [${i+1}] Looking for website URL in detail page...`);
               
               const $labels = $detail('.entry-detail-list__label');
-              console.log(`📋 [${i+1}] Found ${$labels.length} detail labels`);
               
               $labels.each((labelIndex, labelEl) => {
                 const $label = $detail(labelEl);
                 const labelText = $label.text().trim();
-                
-                console.log(`🏷️ [${i+1}] Label ${labelIndex + 1}: "${labelText}"`);
                 
                 // Prüfe ob Label eine URL enthält (startet mit http)
                 if (labelText.startsWith('http')) {
@@ -318,9 +313,9 @@ export async function search11880(query: string, useCache: boolean = true): Prom
                 }
               });
               
-              // Pause zwischen Detail-Requests
-              if (i < 9) {
-                await new Promise(resolve => setTimeout(resolve, 800)); // 800ms zwischen Detail-Seiten
+              // Pause zwischen Detail-Requests (für alle außer dem letzten)
+              if (i < results.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 600)); // 600ms zwischen Detail-Seiten (etwas schneller)
               }
               
             } catch (detailError: any) {
@@ -332,10 +327,7 @@ export async function search11880(query: string, useCache: boolean = true): Prom
           delete result._detailUrl;
         }
         
-        // Bereinige auch die restlichen Einträge ohne Detail-Scraping
-        for (let i = 10; i < results.length; i++) {
-          delete (results[i] as any)._detailUrl;
-        }
+        // Alle Einträge wurden bereits in der Schleife bereinigt
         
         // UNLIMITIERT: Alle Seiten durchsuchen bis keine Ergebnisse mehr
         
