@@ -136,8 +136,6 @@ export async function search11880(query: string): Promise<SourceResult> {
           throw new Error(`CRITICAL: 11880 scraping unavailable. Remote browser: ${String(remoteError?.message || remoteError)} | Sparticuz failed: ${String(sparticuzError?.message || sparticuzError)} | Puppeteer failed: ${String(puppeteerError?.message || puppeteerError)}`);
         }
       }
-      }
-    }
     }
     const page = await browser.newPage();
     
