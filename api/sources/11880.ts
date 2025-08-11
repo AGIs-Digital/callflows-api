@@ -98,6 +98,7 @@ export async function search11880(query: string): Promise<SourceResult> {
           console.log(`🔍 Processing "${companyName}"`);
           
           let phone: string | undefined;
+          let website: string | undefined;
           let description: string | undefined;
           
           // Strategie 1: Suche im direkten li-Element (Listencontainer)
@@ -146,8 +147,64 @@ export async function search11880(query: string): Promise<SourceResult> {
             }
           }
           
-          // Beschreibung
+          // Website-URL suchen (mehrere Strategien)
+          console.log(`🌐 Searching for website URL for "${companyName}"`);
+          
+          // Strategie 1: Direkte Website-Links in der Entry
           const $container = $listItem.length > 0 ? $listItem : $titleEl.closest('.result-list-entry');
+          if ($container.length > 0) {
+            // Suche nach Website-Button oder Link
+            const $websiteLink = $container.find('a[href*="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"])').first();
+            if ($websiteLink.length > 0) {
+              website = $websiteLink.attr('href');
+              console.log(`✅ Found website link: "${website}"`);
+            }
+            
+            // Fallback: Suche nach spezifischen Klassen für Website-Links
+            if (!website) {
+              const websiteSelectors = [
+                'a.result-list-entry-website-link',
+                'a[class*="website"]',
+                'a[class*="homepage"]',
+                'a[class*="web"]',
+                '.website-link a',
+                '.homepage-link a',
+                'a[title*="Website"]',
+                'a[title*="Homepage"]'
+              ];
+              
+              for (const selector of websiteSelectors) {
+                const $webLink = $container.find(selector).first();
+                if ($webLink.length > 0) {
+                  const href = $webLink.attr('href');
+                  if (href && href.startsWith('http') && !href.includes('11880.com')) {
+                    website = href;
+                    console.log(`✅ Found website via selector "${selector}": "${website}"`);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Bereinige Website-URL
+          if (website) {
+            // Entferne 11880-Tracking-Parameter
+            try {
+              const url = new URL(website);
+              if (url.hostname.includes('11880.com') || url.pathname.includes('/redirect/')) {
+                console.log(`⚠️ Skipping 11880 redirect URL: ${website}`);
+                website = undefined;
+              } else {
+                website = url.toString();
+              }
+            } catch (e) {
+              console.log(`⚠️ Invalid URL format: ${website}`);
+              website = undefined;
+            }
+          }
+          
+          // Beschreibung (verwende bereits definiertes $container)
           if ($container.length > 0) {
             description = $container.text().substring(0, 150).replace(/\s+/g, ' ').trim();
           }
@@ -156,11 +213,11 @@ export async function search11880(query: string): Promise<SourceResult> {
             source: '11880',
             companyName,
             phone,
-            url: undefined, // Website-Scraping deaktiviert für HTTP-Version
+            url: website,
             description
           });
           
-          console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'}`);
+          console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'}`);
         });
         
         if (results.length >= 10) break;
