@@ -77,7 +77,7 @@ async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> 
       
       for (const selector of selectors) {
         const elements = document.querySelectorAll(selector);
-        for (const element of elements) {
+        for (const element of Array.from(elements)) {
           const href = element.getAttribute('href');
           if (href && href.startsWith('tel:')) {
             return href.replace('tel:', '').trim();
