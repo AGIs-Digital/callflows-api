@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Callflows API - Unlimitierte Suche mit Cache</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .search-form {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        button {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .cache-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .cache-status {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .cache-info {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .cache-source {
+            flex: 1;
+            min-width: 200px;
+        }
+        .cache-source h4 {
+            margin: 0 0 10px 0;
+            color: #4a5568;
+        }
+        .cache-metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        .progress-bar {
+            margin: 20px 0;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .result-item {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .result-item:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        .result-details {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .icon {
+            font-size: 16px;
+        }
+        .source-badge {
+            background: #4a5568;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .error {
+            background: #fed7d7;
+            border: 1px solid #fc8181;
+            color: #9b2c2c;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .success {
+            background: #c6f6d5;
+            border: 1px solid #68d391;
+            color: #22543d;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .pagination-info {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Unlimitierte Lead-Suche</h1>
+        
+        <div class="search-form">
+            <input type="text" id="query" placeholder="z.B. Friseur Hannover" value="Friseur Hannover">
+            <div class="cache-controls">
+                <button onclick="startNewSearch()">🆕 Neue Suche</button>
+                <button onclick="continueSearch()" id="continueBtn" disabled>➡️ Weiter</button>
+                <button onclick="clearCache()">🗑️ Cache leeren</button>
+            </div>
+        </div>
+
+        <div class="cache-status" id="cacheStatus" style="display: none;">
+            <h3>📊 Cache Status</h3>
+            <div class="cache-info">
+                <div class="cache-source">
+                    <h4>🔍 Google</h4>
+                    <div class="cache-metric">
+                        <span>Ergebnisse:</span>
+                        <span id="googleResults">0</span>
+                    </div>
+                    <div class="cache-metric">
+                        <span>Vollständig:</span>
+                        <span id="googleComplete">❌</span>
+                    </div>
+                    <div class="cache-metric">
+                        <span>Letzte Suche:</span>
+                        <span id="googleLastUpdate">-</span>
+                    </div>
+                </div>
+                <div class="cache-source">
+                    <h4>📞 11880</h4>
+                    <div class="cache-metric">
+                        <span>Ergebnisse:</span>
+                        <span id="11880Results">0</span>
+                    </div>
+                    <div class="cache-metric">
+                        <span>Vollständig:</span>
+                        <span id="11880Complete">❌</span>
+                    </div>
+                    <div class="cache-metric">
+                        <span>Letzte Suche:</span>
+                        <span id="11880LastUpdate">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status"></div>
+        <div class="progress-bar" id="progressBar" style="display: none;">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="pagination-info" id="paginationInfo"></div>
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        let currentResults = [];
+        let isSearching = false;
+
+        async function startNewSearch() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) {
+                showError('Bitte Suchbegriff eingeben');
+                return;
+            }
+
+            if (isSearching) return;
+            isSearching = true;
+
+            showStatus('🚀 Starte neue Suche...', 'info');
+            showProgress(true);
+            updateProgress(10);
+
+            try {
+                const response = await fetch('/api/lead-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        useCache: true,
+                        continueFromCache: false,
+                        pageSize: 50
+                    })
+                });
+
+                updateProgress(90);
+                const data = await response.json();
+                updateProgress(100);
+
+                if (data.success) {
+                    currentResults = data.results;
+                    displayResults(currentResults);
+                    updateCacheStatus(data.cache);
+                    showStatus(`✅ Erste Runde abgeschlossen: ${currentResults.length} Ergebnisse gefunden`, 'success');
+                } else {
+                    showError('Suche fehlgeschlagen: ' + (data.message || 'Unbekannter Fehler'));
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                showError('Netzwerkfehler: ' + error.message);
+            } finally {
+                isSearching = false;
+                showProgress(false);
+            }
+        }
+
+        async function continueSearch() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+
+            if (isSearching) return;
+            isSearching = true;
+
+            showStatus('🔄 Lade weitere Ergebnisse...', 'info');
+            showProgress(true);
+            updateProgress(10);
+
+            try {
+                const response = await fetch('/api/lead-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        useCache: true,
+                        continueFromCache: true,
+                        pageSize: 50
+                    })
+                });
+
+                updateProgress(90);
+                const data = await response.json();
+                updateProgress(100);
+
+                if (data.success) {
+                    // Füge neue Ergebnisse zu bestehenden hinzu
+                    const newResults = data.results.filter(newResult => 
+                        !currentResults.some(existing => 
+                            existing.companyName === newResult.companyName && 
+                            existing.source === newResult.source
+                        )
+                    );
+                    
+                    currentResults = [...currentResults, ...newResults];
+                    displayResults(currentResults);
+                    updateCacheStatus(data.cache);
+                    
+                    if (newResults.length > 0) {
+                        showStatus(`✅ ${newResults.length} neue Ergebnisse hinzugefügt. Gesamt: ${currentResults.length}`, 'success');
+                    } else {
+                        showStatus(`ℹ️ Keine neuen Ergebnisse gefunden. Gesamt: ${currentResults.length}`, 'info');
+                    }
+                } else {
+                    showError('Suche fehlgeschlagen: ' + (data.message || 'Unbekannter Fehler'));
+                }
+            } catch (error) {
+                console.error('Continue search error:', error);
+                showError('Netzwerkfehler: ' + error.message);
+            } finally {
+                isSearching = false;
+                showProgress(false);
+            }
+        }
+
+        async function clearCache() {
+            // Cache leeren ist eine frontend-only Operation hier
+            currentResults = [];
+            displayResults([]);
+            document.getElementById('cacheStatus').style.display = 'none';
+            document.getElementById('continueBtn').disabled = true;
+            showStatus('🗑️ Cache geleert', 'info');
+        }
+
+        function updateCacheStatus(cache) {
+            if (!cache) return;
+
+            document.getElementById('cacheStatus').style.display = 'block';
+            
+            // Google Status
+            document.getElementById('googleResults').textContent = cache.google.totalResults;
+            document.getElementById('googleComplete').textContent = cache.google.isComplete ? '✅' : '❌';
+            document.getElementById('googleLastUpdate').textContent = cache.google.lastUpdate 
+                ? new Date(cache.google.lastUpdate).toLocaleTimeString() 
+                : '-';
+            
+            // 11880 Status
+            document.getElementById('11880Results').textContent = cache['11880'].totalResults;
+            document.getElementById('11880Complete').textContent = cache['11880'].isComplete ? '✅' : '❌';
+            document.getElementById('11880LastUpdate').textContent = cache['11880'].lastUpdate 
+                ? new Date(cache['11880'].lastUpdate).toLocaleTimeString() 
+                : '-';
+
+            // Continue Button aktivieren wenn mehr Daten verfügbar
+            document.getElementById('continueBtn').disabled = !cache.hasMore;
+        }
+
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<div class="error">Keine Ergebnisse gefunden</div>';
+                return;
+            }
+
+            document.getElementById('paginationInfo').textContent = 
+                `📊 ${results.length} Ergebnisse insgesamt`;
+
+            const html = results.map((result, index) => `
+                <div class="result-item">
+                    <div class="company-name">${index + 1}. ${result.companyName}</div>
+                    <div class="result-details">
+                        ${result.phone ? `<div class="detail-item"><span class="icon">📞</span> ${result.phone}</div>` : ''}
+                        ${result.url ? `<div class="detail-item"><span class="icon">🌐</span> <a href="${result.url}" target="_blank">${result.url}</a></div>` : ''}
+                        <div class="detail-item"><span class="source-badge">${result.source.toUpperCase()}</span></div>
+                    </div>
+                    ${result.description ? `<div style="color: #666; margin-top: 10px;">${result.description}</div>` : ''}
+                </div>
+            `).join('');
+
+            resultsDiv.innerHTML = html;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = type;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+        }
+
+        function showError(message) {
+            showStatus('❌ ' + message, 'error');
+        }
+
+        function showProgress(show) {
+            document.getElementById('progressBar').style.display = show ? 'block' : 'none';
+            if (!show) updateProgress(0);
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        // Enter-Taste für Suche
+        document.getElementById('query').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                startNewSearch();
+            }
+        });
+    </script>
+</body>
+</html>

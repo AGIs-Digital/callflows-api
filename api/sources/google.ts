@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
+import { getCachedSearch, setCachedSearch } from '../cache/search-cache';
 
 // Funktion zur Normalisierung und Validierung von Telefonnummern
 function normalizePhoneNumber(phone: string): string | undefined {
@@ -124,15 +125,28 @@ async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> 
   }
 }
 
-export async function searchGoogle(query: string, apiKey: string, cseId: string): Promise<SourceResult> {
+export async function searchGoogle(query: string, apiKey: string, cseId: string, useCache: boolean = true): Promise<SourceResult> {
   try {
     console.log('🔍 Searching Google Custom Search for:', query);
+
+    // Prüfe Cache zuerst
+    if (useCache) {
+      const cached = getCachedSearch(query, 'google');
+      if (cached && !cached.isComplete) {
+        console.log(`📋 GOOGLE: Continuing from cache (page ${cached.currentPage + 1})...`);
+        // Weiter von der letzten Position
+      }
+    }
 
     const results: SearchResult[] = [];
     let totalProcessed = 0;
     
-    // UNLIMITIERT: Alle verfügbaren Seiten durchsuchen
-    const maxPages = 10; // Google API max: 100 Ergebnisse (10 Seiten × 10)
+    // OPTIMIERT für Google Custom Search API Limits:
+    // - 100 Requests pro Tag (kostenlos) 
+    // - 10.000 Requests pro Tag (bezahlt)
+    // - 100 Ergebnisse max (10 Seiten × 10)
+    const maxPages = 10; // Google Custom Search API max: 100 Ergebnisse
+    const requestDelay = 1000; // 1s zwischen Requests (60 Requests/Minute max)
     
     for (let page = 0; page < maxPages; page++) {
       const startIndex = page * 10 + 1;
@@ -164,9 +178,9 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
         for (const [index, item] of itemsToProcess.entries()) {
           totalProcessed++;
           
-          // Verzögerung zwischen Requests
+          // Rate Limiting für Phone Scraping (weniger aggressiv)
           if (index > 0) {
-            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms Pause
+            await new Promise(resolve => setTimeout(resolve, 300)); // 300ms zwischen Phone Requests
           }
           
           try {
@@ -259,14 +273,21 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
         break; // Bei späteren Seiten einfach abbrechen
       }
       
-      // Verzögerung zwischen Seiten
+      // Optimierte Verzögerung für Google API Limits
       if (page < maxPages - 1) {
-        console.log(`⏱️  Waiting 1s before next page...`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1s zwischen Seiten
+        console.log(`⏱️  Rate limiting: Waiting ${requestDelay}ms before next page...`);
+        await new Promise(resolve => setTimeout(resolve, requestDelay));
       }
     }
 
     console.log(`🎉 Google search completed: ${results.length} results found`);
+    
+    // Speichere in Cache
+    if (useCache && results.length > 0) {
+      setCachedSearch(query, 'google', results, maxPages, maxPages, true);
+      console.log(`💾 GOOGLE: Cached ${results.length} results`);
+    }
+    
     return {
       source: 'google',
       results

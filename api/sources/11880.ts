@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { SearchResult, SourceResult } from '../types/lead-scraping';
+import { getCachedSearch, setCachedSearch } from '../cache/search-cache';
 
 // Hilfsfunktion um Suchbegriff in "Was" und "Wo" aufzuteilen
 function parseSearchQuery(query: string): { what: string; where: string } {
@@ -37,12 +38,21 @@ function parseSearchQuery(query: string): { what: string; where: string } {
   };
 }
 
-export async function search11880(query: string): Promise<SourceResult> {
+export async function search11880(query: string, useCache: boolean = true): Promise<SourceResult> {
   try {
     console.log('🔍 11880: Starting HTTP-based search for:', query);
     
     const { what, where } = parseSearchQuery(query);
     console.log(`🎯 11880: Searching "${what}" in "${where}"`);
+    
+    // Prüfe Cache zuerst
+    if (useCache) {
+      const cached = getCachedSearch(query, '11880');
+      if (cached && !cached.isComplete) {
+        console.log(`📋 11880: Continuing from cache (page ${cached.currentPage + 1})...`);
+        // Weiter von der letzten Position
+      }
+    }
     
     // Baue URL nach dem Schema: https://www.11880.com/suche/was/wo
     const searchUrl = `https://www.11880.com/suche/${encodeURIComponent(what)}/${encodeURIComponent(where)}`;
@@ -280,6 +290,13 @@ export async function search11880(query: string): Promise<SourceResult> {
     }
     
     console.log(`🎉 11880 HTTP search completed: ${results.length} total results found (processed ${totalProcessed} entries across ${currentPage - 1} pages)`);
+    
+    // Speichere in Cache
+    if (useCache && results.length > 0) {
+      setCachedSearch(query, '11880', results, currentPage - 1, maxPages, true);
+      console.log(`💾 11880: Cached ${results.length} results from ${currentPage - 1} pages`);
+    }
+    
     return {
       source: '11880',
       results

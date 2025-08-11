@@ -2,6 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { LeadSearchConfig, SearchResult, SourceResult } from './types/lead-scraping';
 import { searchGoogle } from './sources/google';
 import { search11880 } from './sources/11880';
+import { getCacheStatus, getNextPageFromCache } from './cache/search-cache';
 
 // Intelligente Duplikatentfernung
 function removeDuplicates(results: SearchResult[]): SearchResult[] {
@@ -86,6 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Request headers:', req.headers);
 
     const config: LeadSearchConfig = req.body;
+    const { useCache = true, pageSize = 20, continueFromCache = false } = req.body;
 
     if (!config || !config.query?.trim()) {
       console.error('Invalid request body:', config);
@@ -95,7 +97,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    console.log(`Starting parallel search for: "${config.query}"`);
+    console.log(`Starting search for: "${config.query}"`, { useCache, pageSize, continueFromCache });
+    
+    // CACHE-MODUS: Prüfe ob bereits Ergebnisse vorhanden sind
+    if (useCache && continueFromCache) {
+      console.log('🔄 CACHE MODE: Checking for cached results...');
+      
+      const googleCache = getCacheStatus(config.query, 'google');
+      const cache11880 = getCacheStatus(config.query, '11880');
+      
+      console.log('📊 Cache Status:', { 
+        google: googleCache, 
+        cache11880 
+      });
+      
+      // Wenn Cache vorhanden, gib nächste Seite zurück
+      if (googleCache.cached || cache11880.cached) {
+        const googlePage = getNextPageFromCache(config.query, 'google', pageSize);
+        const page11880 = getNextPageFromCache(config.query, '11880', pageSize);
+        
+        const allResults = [...googlePage.results, ...page11880.results];
+        const finalResults = removeDuplicates(allResults);
+        
+        console.log(`✅ CACHE: Returning ${finalResults.length} cached results`);
+        
+        return res.status(200).json({
+          success: true,
+          results: finalResults,
+          cache: {
+            google: googleCache,
+            cache11880,
+            hasMore: googlePage.hasMore || page11880.hasMore
+          },
+          fromCache: true
+        });
+      }
+    }
 
     // Parallele Suche in allen verfügbaren Quellen
     const searchPromises: Promise<SourceResult>[] = [];
@@ -123,14 +160,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     if (googleApiKey && googleCseId) {
       console.log('Google API: Starting search with credentials');
-      searchPromises.push(searchGoogle(config.query, googleApiKey, googleCseId));
+      searchPromises.push(searchGoogle(config.query, googleApiKey, googleCseId, useCache));
     } else {
       console.error('Google API: Still no credentials available');
       errors.push('Google API: Keine gültigen Credentials verfügbar');
     }
 
     // 11880 (immer versuchen, AGB werden intern geprüft)
-    searchPromises.push(search11880(config.query));
+    searchPromises.push(search11880(config.query, useCache));
 
     if (searchPromises.length === 0) {
       return res.status(500).json({
@@ -170,10 +207,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uniqueResults = removeDuplicates(allResults);
     console.log(`Unique results after deduplication: ${uniqueResults.length}`);
 
+    // Cache-Status für Response
+    const googleCacheStatus = getCacheStatus(config.query, 'google');
+    const cache11880Status = getCacheStatus(config.query, '11880');
+
     return res.status(200).json({
       success: true,
       results: uniqueResults,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
+      cache: {
+        google: googleCacheStatus,
+        "11880": cache11880Status,
+        hasMore: !googleCacheStatus.isComplete || !cache11880Status.isComplete
+      },
+      fromCache: false
     });
 
   } catch (error: any) {
