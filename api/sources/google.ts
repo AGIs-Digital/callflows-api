@@ -185,7 +185,7 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
             
             if (!item.link) {
               console.log(`[${index + 1}] ❌ SKIPPED (No link)`);
-              return;
+              continue;
             }
             
             const url = new URL(item.link);
@@ -201,7 +201,7 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
             
             if (isUnwanted) {
               console.log(`[${index + 1}] ❌ SKIPPED (Forum/Social): ${domain}`);
-              return;
+              continue;
             }
             
             console.log(`[${index + 1}] ✅ BUSINESS WEBSITE: ${domain}`);
