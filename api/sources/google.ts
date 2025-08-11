@@ -144,8 +144,8 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string,
     // PRODUCTION OPTIMIERT für Google Custom Search API:
     // - 100 Ergebnisse max (10 Seiten × 10) - Google API Limit
     // - Schnelleres Rate Limiting für Production
-    const maxPages = 10; // Google Custom Search API max: 100 Ergebnisse
-    const requestDelay = 200; // 200ms zwischen Requests (etwas schneller)
+    const maxPages = 100; // Google Custom Search API max: 100 Ergebnisse
+    const requestDelay = 500; // 500ms zwischen Requests (etwas schneller)
     
     for (let page = 0; page < maxPages; page++) {
       const startIndex = page * 10 + 1;
