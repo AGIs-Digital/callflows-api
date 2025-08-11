@@ -56,6 +56,14 @@ export async function search11880(query: string): Promise<SourceResult> {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
     } else {
+      // Vercel Production - zuerst: optionaler Remote-Browser via WebSocket (z. B. Browserless)
+      const wsEndpoint = process.env.BROWSER_WS_ENDPOINT || process.env.BROWSERLESS_WS || process.env.PUPPETEER_WS_ENDPOINT;
+      if (wsEndpoint) {
+        console.log('🔧 Using remote Chromium via WebSocket endpoint');
+        console.log('🔧 WS endpoint host:', new URL(wsEndpoint).host);
+        browser = await puppeteerCore.connect({ browserWSEndpoint: wsEndpoint });
+        console.log('✅ Connected to remote browser');
+      } else {
       // Vercel Production - verwende @sparticuz/chromium (modernste Vercel-kompatible Library)
       console.log('🔧 Using @sparticuz/chromium for Vercel');
       console.log('🔧 Platform:', process.platform);
@@ -116,6 +124,7 @@ export async function search11880(query: string): Promise<SourceResult> {
           console.error('❌ Regular puppeteer also failed:', puppeteerError);
           throw new Error(`CRITICAL: 11880 scraping unavailable. Sparticuz failed: ${String(sparticuzError?.message || sparticuzError)} | Puppeteer failed: ${String(puppeteerError?.message || puppeteerError)}`);
         }
+      }
       }
     }
     const page = await browser.newPage();
