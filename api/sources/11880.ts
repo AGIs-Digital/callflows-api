@@ -270,8 +270,14 @@ export async function search11880(query: string, useCache: boolean = true): Prom
         // STUFE 2: Detail-Scraping für Website-URLs (AKTIVIERT!)
         console.log(`🔄 Starting detail scraping for ${results.length} entries...`);
         
+        // Debug: Prüfe welche Einträge Detail-URLs haben
+        const entriesWithDetailUrls = results.filter((r: any) => r._detailUrl);
+        console.log(`🔍 DEBUG: ${entriesWithDetailUrls.length} entries have detail URLs`);
+        
         for (let i = 0; i < results.length && i < 10; i++) { // Limit auf erste 10 für Performance
           const result = results[i] as any;
+          
+          console.log(`🔍 DEBUG [${i+1}]: Checking entry "${result.companyName}" - detailUrl: ${result._detailUrl ? 'YES' : 'NO'} - url: ${result.url ? 'ALREADY HAS' : 'MISSING'}`);
           
           if (result._detailUrl && !result.url) {
             try {
