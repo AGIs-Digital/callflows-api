@@ -156,24 +156,55 @@ export async function search11880(query: string): Promise<SourceResult> {
             
             // STUFE 1: Finde Detail-URL für diesen Eintrag
             
-            // Suche nach "Mehr Details" Link oder Title-Link
+            // Suche nach verschlüsselten Detail-URLs und anderen Link-Pattern
             const detailLinkSelectors = [
+              // Direkte Links (falls unverschlüsselt)
               'a[href*="/branchenbuch/"]',
               'a[href*="11880.com"][href*="html"]',
+              // Title-Links (oft verschlüsselt)
               '.result-list-entry-title a',
               'h2 a',
+              'h2.result-list-entry-title__headline a',
+              // Mehr Details Buttons
               'a:contains("Mehr Details")',
-              'a:contains("Details")'
+              'a:contains("Details")',
+              // Verschlüsselte Links (enthalten lange Base64-ähnliche Strings)
+              'a[href*="*"]', // Links die mit * beginnen (verschlüsselt)
+              'a[href^="/"]', // Relative Links
+              // Nach data-Attributen
+              'a[data-href]',
+              'a[data-url]',
+              '[data-testid*="detail"] a',
+              // Alle Links im Container
+              'a[href]'
             ];
             
             for (const selector of detailLinkSelectors) {
               const $detailLink = $container.find(selector).first();
               if ($detailLink.length > 0) {
                 const href = $detailLink.attr('href');
-                if (href && href.includes('11880.com')) {
-                  detailUrl = href.startsWith('http') ? href : `https://www.11880.com${href}`;
-                  console.log(`🔗 Found detail URL: ${detailUrl}`);
-                  break;
+                console.log(`🔍 Found link with selector "${selector}": ${href}`);
+                
+                if (href) {
+                  // Verschlüsselte Links (beginnen mit *)
+                  if (href.startsWith('*')) {
+                    console.log(`🔒 Found encrypted link: ${href}`);
+                    detailUrl = `https://www.11880.com${href}`;
+                    console.log(`🔗 Constructed encrypted detail URL: ${detailUrl}`);
+                    break;
+                  }
+                  // Normale Links
+                  else if (href.includes('11880.com') || href.includes('/branchenbuch/')) {
+                    detailUrl = href.startsWith('http') ? href : `https://www.11880.com${href}`;
+                    console.log(`🔗 Found normal detail URL: ${detailUrl}`);
+                    break;
+                  }
+                  // Relative Links die vielversprechend aussehen
+                  else if (href.startsWith('/') && (href.length > 20 || href.includes('branchenbuch'))) {
+                    detailUrl = `https://www.11880.com${href}`;
+                    console.log(`🔗 Found relative detail URL: ${detailUrl}`);
+                    break;
+                  }
                 }
               }
             }
