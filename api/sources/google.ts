@@ -32,6 +32,12 @@ function normalizePhoneNumber(phone: string): string | undefined {
 async function scrapePhoneFromWebsite(url: string): Promise<string | undefined> {
   const isLocal = process.env.NODE_ENV !== 'production';
   
+  // DEAKTIVIERT in Production um Browser-Konflikte zu vermeiden
+  if (!isLocal) {
+    console.log('Google phone scraping disabled in production to prevent browser conflicts');
+    return undefined;
+  }
+  
   let browser;
   if (isLocal) {
     // Lokale Entwicklung - verwende System Chrome
