@@ -100,6 +100,7 @@ export async function search11880(query: string): Promise<SourceResult> {
           let phone: string | undefined;
           let website: string | undefined;
           let description: string | undefined;
+          let detailUrl: string | undefined;
           
           // Strategie 1: Suche im direkten li-Element (Listencontainer)
           const $listItem = $titleEl.closest('li');
@@ -154,7 +155,6 @@ export async function search11880(query: string): Promise<SourceResult> {
           if ($container.length > 0) {
             
             // STUFE 1: Finde Detail-URL für diesen Eintrag
-            let detailUrl: string | undefined;
             
             // Suche nach "Mehr Details" Link oder Title-Link
             const detailLinkSelectors = [
@@ -187,75 +187,8 @@ export async function search11880(query: string): Promise<SourceResult> {
               }
             }
             
-            // STUFE 2: Wenn Detail-URL gefunden, hole Website von Detail-Seite
-            if (detailUrl) {
-              try {
-                console.log(`📄 Fetching detail page for website: ${detailUrl}`);
-                
-                const detailResponse = await axios.get(detailUrl, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'de-DE,de;q=0.9',
-                    'Referer': 'https://www.11880.com/suche/friseur/hannover'
-                  },
-                  timeout: 6000
-                });
-                
-                console.log(`✅ Detail page loaded: ${detailResponse.status}`);
-                
-                // Parse Detail-Seite
-                const $detail = cheerio.load(detailResponse.data);
-                
-                // Suche Website-Button oder Link auf Detail-Seite
-                const websiteSelectors = [
-                  // Website-Button (wie im Screenshot)
-                  'a[href*="http"]:contains("Website")',
-                  'button:contains("Website") + a',
-                  '.entry-detail-list a[href*="http"]:not([href*="11880.com"])',
-                  // Allgemeine externe Links
-                  'a[href^="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"]):not([href*="facebook"]):not([href*="instagram"])',
-                  // Nach Icon-Klassen
-                  'a[class*="website"]',
-                  'a[class*="web"]',
-                  'a[class*="homepage"]',
-                  // Spezifische 11880-Klassen
-                  '.website-link',
-                  '.homepage-link',
-                  '[data-testid*="website"] a',
-                  // Nach Text-Pattern
-                  'a:contains("www.")',
-                  'a:contains(".de")',
-                  'a:contains(".com")'
-                ];
-                
-                for (const selector of websiteSelectors) {
-                  const $webLink = $detail(selector).first();
-                  if ($webLink.length > 0) {
-                    const href = $webLink.attr('href');
-                    if (href && href.startsWith('http') && !href.includes('11880.com')) {
-                      website = href;
-                      console.log(`✅ Found website from detail page via "${selector}": "${website}"`);
-                      break;
-                    }
-                  }
-                }
-                
-                // Fallback: Suche nach Domain-Pattern im Detail-Text
-                if (!website) {
-                  const detailText = $detail('body').text();
-                  const domainMatch = detailText.match(/(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/);
-                  if (domainMatch && !domainMatch[0].includes('11880')) {
-                    const domain = domainMatch[0];
-                    website = domain.startsWith('www.') ? `https://${domain}` : `https://www.${domain}`;
-                    console.log(`✅ Found website from detail text: "${website}"`);
-                  }
-                }
-                
-              } catch (detailError: any) {
-                console.error(`❌ Failed to fetch detail page for ${companyName}:`, detailError.message);
-              }
-            }
+            // Speichere Detail-URL für späteren Abruf
+            console.log(`🔗 Detail URL found: ${detailUrl || 'none'}`);
           }
           
           // Bereinige Website-URL
@@ -285,11 +218,76 @@ export async function search11880(query: string): Promise<SourceResult> {
             companyName,
             phone,
             url: website,
-            description
+            description,
+            _detailUrl: detailUrl // Temporär für Detail-Scraping
           });
           
-          console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'}`);
+          console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'} - ${detailUrl ? 'Detail: ✓' : 'Detail: ✗'}`);
         });
+        
+        // STUFE 2: Detail-Scraping für Website-URLs (nach der each-Schleife)
+        console.log(`🔄 Starting detail scraping for ${results.length} entries...`);
+        
+        for (let i = 0; i < results.length && i < 5; i++) { // Limit auf erste 5 für Performance
+          const result = results[i] as any;
+          
+          if (result._detailUrl && !result.url) {
+            try {
+              console.log(`📄 [${i+1}] Fetching detail page: ${result._detailUrl}`);
+              
+              const detailResponse = await axios.get(result._detailUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                  'Accept-Language': 'de-DE,de;q=0.9',
+                  'Referer': searchUrl
+                },
+                timeout: 5000
+              });
+              
+              console.log(`✅ [${i+1}] Detail page loaded: ${detailResponse.status}`);
+              
+              // Parse Detail-Seite
+              const $detail = cheerio.load(detailResponse.data);
+              
+              // Suche Website-Button oder Link auf Detail-Seite
+              const websiteSelectors = [
+                // Website-Button (wie im Screenshot)
+                'a[href*="http"]:contains("Website")',
+                'button:contains("Website") + a',
+                '.entry-detail-list a[href*="http"]:not([href*="11880.com"])',
+                // Allgemeine externe Links
+                'a[href^="http"]:not([href*="11880.com"]):not([href*="tel:"]):not([href*="mailto:"]):not([href*="maps.google"]):not([href*="facebook"]):not([href*="instagram"])',
+                // Nach Icon-Klassen
+                'a[class*="website"]',
+                'a[class*="web"]',
+                'a[class*="homepage"]',
+                // Spezifische 11880-Klassen
+                '.website-link',
+                '.homepage-link',
+                '[data-testid*="website"] a'
+              ];
+              
+              for (const selector of websiteSelectors) {
+                const $webLink = $detail(selector).first();
+                if ($webLink.length > 0) {
+                  const href = $webLink.attr('href');
+                  if (href && href.startsWith('http') && !href.includes('11880.com')) {
+                    result.url = href;
+                    console.log(`✅ [${i+1}] Found website from detail page: "${href}"`);
+                    break;
+                  }
+                }
+              }
+              
+            } catch (detailError: any) {
+              console.error(`❌ [${i+1}] Failed to fetch detail page for ${result.companyName}:`, detailError.message);
+            }
+          }
+          
+          // Bereinige temporäre Felder
+          delete result._detailUrl;
+        }
         
         if (results.length >= 10) break;
         
