@@ -130,8 +130,8 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
 
     const results: SearchResult[] = [];
     
-    // TESTING: Limit auf 10 Ergebnisse für Tests
-    const maxPages = 1; // Nur erste Seite für Tests
+    // Production: Mehr Seiten für bessere Ergebnisse
+    const maxPages = 3; // Bis zu 30 Ergebnisse (3 Seiten × 10)
     
     for (let page = 0; page < maxPages; page++) {
       const startIndex = page * 10 + 1;
@@ -155,13 +155,12 @@ export async function searchGoogle(query: string, apiKey: string, cseId: string)
           break; // Keine weiteren Ergebnisse
         }
 
-        // Verarbeite alle 10 Ergebnisse für Tests (normalerweise nur 3 um Zeit zu sparen)
-        const itemsToProcess = response.data.items.slice(0, 10); // Alle für Tests
+        // Verarbeite alle 10 Ergebnisse pro Seite
+        const itemsToProcess = response.data.items; // Alle Ergebnisse
         
         console.log(`Processing ${itemsToProcess.length} Google results...`);
 
         for (const [index, item] of itemsToProcess.entries()) {
-          if (results.length >= 10) break; // TESTING: Limit auf 10 Ergebnisse gesamt
           
           try {
             console.log(`[${index + 1}/${itemsToProcess.length}] Processing: ${item.title}`);

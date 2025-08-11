@@ -88,7 +88,6 @@ export async function search11880(query: string): Promise<SourceResult> {
         }
         
         titleElements.each((index, titleEl) => {
-          if (results.length >= 10) return false; // Break out of loop
           
           const $titleEl = $(titleEl);
           const companyName = $titleEl.text().trim();
@@ -256,88 +255,13 @@ export async function search11880(query: string): Promise<SourceResult> {
           console.log(`✅ 11880: "${companyName}" - ${phone ? 'Phone: ✓' : 'Phone: ✗'} - ${website ? 'Website: ✓' : 'Website: ✗'} - ${detailUrl ? 'Detail: ✓' : 'Detail: ✗'}`);
         });
         
-        // STUFE 2: Detail-Scraping für Website-URLs (nach der each-Schleife)
-        console.log(`🔄 Starting detail scraping for ${results.length} entries...`);
-        
-        for (let i = 0; i < results.length && i < 5; i++) { // Limit auf erste 5 für Performance
-          const result = results[i] as any;
-          
-          if (result._detailUrl && !result.url) {
-            try {
-              console.log(`📄 [${i+1}] Fetching detail page: ${result._detailUrl}`);
-              
-              const detailResponse = await axios.get(result._detailUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                  'Accept-Language': 'de-DE,de;q=0.9',
-                  'Referer': searchUrl
-                },
-                timeout: 5000
-              });
-              
-              console.log(`✅ [${i+1}] Detail page loaded: ${detailResponse.status}`);
-              
-              // Parse Detail-Seite
-              const $detail = cheerio.load(detailResponse.data);
-              
-              // Nutze die strukturierte Detail-Seite mit entry-detail-list__label
-              console.log(`🔍 [${i+1}] Parsing structured detail page...`);
-              
-              // Finde alle entry-detail-list__label Elemente (4 Stück: Telefon, Adresse, E-Mail, Homepage)
-              const $labels = $detail('.entry-detail-list__label');
-              console.log(`📋 [${i+1}] Found ${$labels.length} detail labels`);
-              
-              $labels.each((labelIndex, labelEl) => {
-                const $label = $detail(labelEl);
-                const labelText = $label.text().trim().toLowerCase();
-                
-                console.log(`🏷️ [${i+1}] Label ${labelIndex + 1}: "${labelText}"`);
-                
-                // Suche nach Website/Homepage Label
-                if (labelText.includes('website') || labelText.includes('homepage') || labelText.includes('web')) {
-                  // Finde den Link im gleichen Container
-                  const $container = $label.parent();
-                  const $websiteLink = $container.find('a[href^="http"]:not([href*="11880.com"])').first();
-                  
-                  if ($websiteLink.length > 0) {
-                    const href = $websiteLink.attr('href');
-                    if (href) {
-                      result.url = href;
-                      console.log(`✅ [${i+1}] Found website via structured label: "${href}"`);
-                      return false; // Break out of each loop
-                    }
-                  }
-                }
-                
-                // Fallback: Suche nach E-Mail Label und extrahiere Website aus E-Mail-Domain
-                if (!result.url && (labelText.includes('e-mail') || labelText.includes('email'))) {
-                  const $container = $label.parent();
-                  const emailText = $container.text();
-                  const emailMatch = emailText.match(/([a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))/);
-                  
-                  if (emailMatch) {
-                    const domain = emailMatch[2];
-                    if (!domain.includes('gmail') && !domain.includes('outlook') && !domain.includes('web.de')) {
-                      const websiteUrl = `https://www.${domain}`;
-                      result.url = websiteUrl;
-                      console.log(`✅ [${i+1}] Found website via email domain: "${websiteUrl}"`);
-                      return false; // Break out of each loop
-                    }
-                  }
-                }
-              });
-              
-            } catch (detailError: any) {
-              console.error(`❌ [${i+1}] Failed to fetch detail page for ${result.companyName}:`, detailError.message);
-            }
-          }
-          
-          // Bereinige temporäre Felder
-          delete result._detailUrl;
+        // STUFE 2: Detail-Scraping deaktiviert für Production (verschlüsselte URLs)
+        // Bereinige temporäre Felder
+        for (const result of results) {
+          delete (result as any)._detailUrl;
         }
         
-        if (results.length >= 10) break;
+        if (results.length >= 50) break; // Production limit: 50 pro Seite
         
         currentPage++;
         

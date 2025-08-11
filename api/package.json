@@ -11,9 +11,6 @@
   "dependencies": {
     "@vercel/node": "^3.0.21",
     "axios": "^1.6.0",
-    "puppeteer-core": "^21.5.0",
-    "puppeteer": "^21.5.0",
-    "@sparticuz/chromium": "^121.0.0",
     "cheerio": "^1.0.0-rc.12"
   },
   "devDependencies": {

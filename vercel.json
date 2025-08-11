@@ -6,11 +6,7 @@
       "memory": 1024
     }
   },
-  "env": {
-    "PUPPETEER_SKIP_DOWNLOAD": "1",
-    "NPM_CONFIG_FUND": "false",
-    "NPM_CONFIG_AUDIT": "false"
-  },
+
   "headers": [
     {
       "source": "/api/(.*)",
